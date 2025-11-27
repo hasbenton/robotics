@@ -54,6 +54,7 @@ while robot.step(timestep) != -1:
     
     for point in point_cloud:
         px, py, pz = [point.x,point.y,point.z]  # pz is height (ignore for 2D mapping)
+        py = - py #As the map goes down for y-coordinates
         distance = math.hypot(px, py)  # Distance from robot to point
         
         # Filter valid wall points (0.1m to 5m to avoid noise/errors)
