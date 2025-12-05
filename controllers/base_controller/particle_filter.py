@@ -1,14 +1,20 @@
 import numpy as np
 import math
 import random as r
+from lidar import lidar_point_to_grid
 
-#Using Monte Carlo Localisation
-#Assume particles is a list of (Co-ords, Facing, probability of correct position)
-#       movement is  (distance, rotation) - Robot rotated then moved
-#       sensor_read is an array of distances
-#       map is a 2d array
+
 def Particle_filter(particles, movement, sensor_read, map) :
-    #                                   Mean, Standard Distribution, Size of array
+    '''Using Monte Carlo Localisation.
+    
+    Assume particles is a list of (Co-ords, Facing, probability of correct position)
+
+    movement is  (distance, rotation) - Robot rotated then moved
+
+    sensor_read is an array of points
+
+    map is a 2d array'''
+    #                                 Mean, Standard Distribution, Size of array
     move_random = movement[0] + (np.random.normal(0.0, 1.0, len(particles))  * movement[0] / 20) #20 is how much randomness affects the movements 
     rotate_random = movement[1] + (np.random.normal(0.0, 1.0, len(particles)) * movement[1] / 20)#20 Can be changed
 
@@ -27,12 +33,13 @@ def Particle_filter(particles, movement, sensor_read, map) :
         sum_of_squares = 0
         #Check each direction compared to the map
         for i in range(len(sensor_read)) :
-            #Rotate sensor data based off of orientation
-            angle = (i * point[1] * 2 * math.pi) / len(sensor_read)
-
-            #Go in the direction of the sensor until a 1 is found on the map
+            
             hit1 = False
             position = point[0] #[x,y]
+            
+            #Converts sensor point to a point on the grid based off of the particle's position and facing
+            sensor = lidar_point_to_grid(sensor_read[i].x, sensor_read[i].y, point[1], position[0], position[1])
+            
 
             #If not hit and position inside the map 
             while (not(hit1) and 0 <= position[0] <= len(map[0]) and 0 <= position[1] <= len(map)) :
@@ -44,28 +51,25 @@ def Particle_filter(particles, movement, sensor_read, map) :
                    else :
                         #Move to the next position
                         #Shortest distance to make it to the next coord in x or y
-                        #By reverse polar positions - doing Update Positions thing backwards
+                        
+                         if (sensor[0] > 0) :
+                              x = ((round(position[0]) - 0.5) - position[0]) / sensor[0]
+                         else :
+                              x = ((round(position[0]) + 0.5) - position[0]) / sensor[0]
 
-                        #Works out if angle is going positive or negative for x
-                        x = 0.5 if (- math.pi / 2) < angle < (math.pi / 2) else -0.49
-                        x += round(position[0])
+                         if (sensor[1] > 0) :
+                              y = ((round(position[1]) - 0.5) - position[1]) / sensor[1]
+                         else :
+                              y = ((round(position[1]) + 0.5) - position[1]) / sensor[1]
 
-                        x = (x - position[0]) / math.cos(angle)
-                        #x is now a scaling factor
+                         if x < y :
+                              position[0] += x * sensor[0]
+                              position[1] += x * sensor[1]
+                         else :
+                              position[0] += y * sensor[0]
+                              position[1] += y * sensor[1]
 
-                        #Works out if angle is going positive or negative for y
-                        y = 0.5 if 0 < angle < math.pi else -0.49
-                        y += round(position[1])
-
-                        y = (y - position[1]) / math.sin(angle)
-                        #y is now a scaling factor
-
-                        if x > y :
-                             position[0] += y * math.cos(angle)
-                             position[1] += y * math.sin(angle)
-                        else :
-                             position[0] += x * math.cos(angle)
-                             position[1] += x * math.sin(angle)
+                                  
             
             #If hit wall, find distance and find difference to sensor read
             if hit1 :

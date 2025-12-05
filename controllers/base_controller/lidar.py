@@ -28,7 +28,7 @@ def meters_to_grid(meters):
     """Convert meters to grid cell indices (integer)."""
     return int(round(meters / GRID_CELL_SIZE))
 
-def lidar_point_to_grid(px, py):
+def lidar_point_to_grid(px, py, ROBOT_THETA=ROBOT_THETA, ROBOT_X=ROBOT_X, ROBOT_Y=ROBOT_Y):
     """
     Convert LiDAR point (relative to robot) to grid coordinates.
     Accounts for robot's position and orientation.
