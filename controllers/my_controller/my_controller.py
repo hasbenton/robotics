@@ -3,6 +3,7 @@
 import math
 from statistics import mean
 from controller import Robot, Motor, PositionSensor, Lidar, Accelerometer, Gyro, Compass, DistanceSensor
+import lidar as l
 
 ROBOT_X = 0.0  # x-coordinate in meters
 ROBOT_Y = 0.0  # y-coordinate in meters
@@ -10,8 +11,6 @@ ROBOT_THETA = 0.0  # Orientation (radians, 0 = facing positive x)
 
 TIME_STEP = 32
 MAX_VELOCITY = 26
-
-
 
 # Define variables
 front_left_motor = None
@@ -36,6 +35,11 @@ COLLISION_THRESHOLD = 0.8
 # Initialize Webots
 robot = Robot()
 
+# Configure LiDAR
+lidar = robot.getDevice('laser')
+lidar.enable(TIME_STEP)
+lidar.enablePointCloud()  # Get 3D points (x, y, z)
+
 # Get a handler to the motors
 front_left_motor = robot.getDevice("fl_wheel_joint")
 front_right_motor = robot.getDevice("fr_wheel_joint")
@@ -47,10 +51,10 @@ front_right_position = robot.getDevice("front right wheel motor sensor")
 rear_left_position = robot.getDevice("rear left wheel motor sensor")
 rear_right_position = robot.getDevice("rear right wheel motor sensor")
 
-front_left_position.enable(10)
-front_right_position.enable(10)
-rear_left_position.enable(10)
-rear_right_position.enable(10)
+front_left_position.enable(TIME_STEP)
+front_right_position.enable(TIME_STEP)
+rear_left_position.enable(TIME_STEP)
+rear_right_position.enable(TIME_STEP)
 
 front_left_last = 0
 front_right_last = 0
@@ -83,6 +87,8 @@ for i in range(4):
 # If it can't turn 180 degrees, increase this number; if it turns too much, decrease it.
 turn_180_counter = 0 
 TURN_STEPS_DURATION = 5 
+
+PARTICLES = l.initialise(ROBOT_X, ROBOT_Y, ROBOT_THETA)
 
 # Main loop
 while robot.step(TIME_STEP) != -1:
@@ -188,3 +194,6 @@ while robot.step(TIME_STEP) != -1:
     front_right_last = front_right_position.getValue()
     rear_left_last = rear_left_position.getValue()
     rear_right_last = rear_right_position.getValue()
+
+    #Get Lidar Mapping
+    grid = l.run_lidar([distance,angle_change], ROBOT_X, ROBOT_Y, ROBOT_THETA, lidar, PARTICLES)
