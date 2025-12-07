@@ -1,13 +1,30 @@
 import numpy as np
 import math
 import random as r
-from lidar import lidar_point_to_grid
 
+def lidar_point_to_grid(px, py, ROBOT_THETA, ROBOT_X, ROBOT_Y):
+    """
+    Convert LiDAR point (relative to robot) to grid coordinates.
+    Accounts for robot's position and orientation.
+    """
+    # Rotate point by robot's orientation (theta)
+    rotated_x = px * math.cos(ROBOT_THETA) - py * math.sin(ROBOT_THETA)
+    rotated_y = px * math.sin(ROBOT_THETA) + py * math.cos(ROBOT_THETA)
+
+    # Convert to absolute position (world coordinates)
+    abs_x = ROBOT_X + rotated_x
+    abs_y = ROBOT_Y + rotated_y
+
+    # Convert to grid coordinates
+    grid_x = int(round(abs_x / 0.25))
+    grid_y = int(round(abs_y / 0.25))
+    
+    return grid_x, grid_y
 
 def Particle_filter(particles, movement, sensor_read, map) :
     '''Using Monte Carlo Localisation.
     
-    Assume particles is a list of (Co-ords, Facing, probability of correct position)
+    Assume particles is a list of (X, Y , Facing, probability of correct position)
 
     movement is  (distance, rotation) - Robot rotated then moved
 
@@ -21,11 +38,11 @@ def Particle_filter(particles, movement, sensor_read, map) :
     #Update positions with moving
     for i in range(len(particles)) :
         #x-coord
-        particles[i][0][0] += move_random[i] * math.cos(rotate_random[i])
+        particles[i][0] += move_random[i] * math.cos(rotate_random[i])
         #y-coord
-        particles[i][0][1] += move_random[i] * math.sin(rotate_random[i])
+        particles[i][1] += move_random[i] * math.sin(rotate_random[i])
         #Rotation
-        particles[i][1] += rotate_random[i]
+        particles[i][2] += rotate_random[i]
     
     #Weight each point based off of sensor data
     weighted_particles = []
@@ -34,11 +51,16 @@ def Particle_filter(particles, movement, sensor_read, map) :
         #Check each direction compared to the map
         for i in range(len(sensor_read)) :
             
+            if math.isinf(sensor_read[i].x) or math.isinf(sensor_read[i].y) :
+                 continue
+            if math.isnan(sensor_read[i].y) or math.isnan(sensor_read[i].y) :
+                 continue
+            
             hit1 = False
-            position = point[0] #[x,y]
+            position = [point[0],point[1]] #[x,y]
             
             #Converts sensor point to a point on the grid based off of the particle's position and facing
-            sensor = lidar_point_to_grid(sensor_read[i].x, sensor_read[i].y, point[1], position[0], position[1])
+            sensor = lidar_point_to_grid(sensor_read[i].x, sensor_read[i].y, point[2], position[0], position[1])
             
 
             #If not hit and position inside the map 
@@ -73,27 +95,29 @@ def Particle_filter(particles, movement, sensor_read, map) :
             
             #If hit wall, find distance and find difference to sensor read
             if hit1 :
-                 distance = math.sqrt(sum(x*x for x in position))
+                 distance = [abs(sensor_read[i].x - position[0]), abs(sensor_read[i].y - position[1])] 
 
-                 sum_of_squares += math.sqrt(
-                           (sensor_read[i] * sensor_read[i]) + (distance * distance)
-                      )
+                 sum_of_squares +=  math.sqrt(sum(x*x for x in distance))
 
-        point[2] = 1 - sum_of_squares
+        point[3] = 1 - sum_of_squares
         #1 / sum_of_squares is to give smaller differences more weight
-        weighted_particles.append(1 / sum_of_squares)
+        if (sum_of_squares != 0) :
+              weighted_particles.append(1 / sum_of_squares)
+        else :
+              weighted_particles.append(0)
+
 
     #Now sample new points based off of these weighted points
     weight_sum = sum(weighted_particles)
     newParticles = []
-    for i in range(particles) :
+    for i in range(len(particles)) :
          pick = r.random() * weight_sum
 
          for j in range(len(weighted_particles)) :
-              pick -= weighted_particles[j]
-
-              if pick < 0 :
+              pick -= weighted_particles[j] 
+              if pick <= 0 :
                    newParticles.append(particles[j])
+
 
     particles = newParticles
 
