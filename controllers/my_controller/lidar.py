@@ -1,81 +1,92 @@
-from controller import Robot
-from particle_filter import Particle_filter
 import math
+import os
+import numpy as np
+from controller import Lidar
 
-# Grid parameters (matches test_maps.py: 22x22 grid, 0.25m per cell)
-GRID_CELL_SIZE = 0.25  # Meters per grid cell
-GRID_WIDTH = 22        # Number of columns
-GRID_HEIGHT = 22       # Number of rows
+# ========== Grid Map Configuration ==========
+GRID_CELL_SIZE = 0.05    # Each grid cell represents 0.05 meters
+MAP_WIDTH = 100          # Grid map width (columns)
+MAP_HEIGHT = 100         # Grid map height (rows)
+# ==================================
 
-# Initialize grid with map1 (from test_maps.py) as a base
-from test_maps import map1
-grid = [row.copy() for row in map1]
-
-
-def initialise(ROBOT_X, ROBOT_Y, ROBOT_THETA) :
-    """Initialise Particle filter map"""
-
-    PARTICLES = [[ROBOT_X/GRID_CELL_SIZE, ROBOT_Y/GRID_CELL_SIZE, ROBOT_THETA, 1] for i in range(20)]
-
-    return PARTICLES
+def initialise(init_x, init_y, init_theta, num_particles=20):
+    """
+    Particle filter initialization function (Resolves 'l.initialise' call error in my_controller)
+    :param init_x: Robot initial X coordinate (meters)
+    :param init_y: Robot initial Y coordinate (meters)
+    :param init_theta: Robot initial orientation (radians)
+    :param num_particles: Number of particles (default 20)
+    :return: List of initialized particles, each particle is [x, y, theta, weight]
+    """
+    particles = []
+    for _ in range(num_particles):
+        x = init_x + np.random.normal(0, 0.05)  # Gaussian noise in X direction
+        y = init_y + np.random.normal(0, 0.05)  # Gaussian noise in Y direction
+        theta = init_theta + np.random.normal(0, 0.05)  # Gaussian noise in orientation
+        weight = 1.0 / num_particles  # Initial weight is equally distributed
+        particles.append([x, y, theta, weight])
+    return particles
 
 def meters_to_grid(meters):
-    """Convert meters to grid cell indices (integer)."""
-    return int(round(meters / GRID_CELL_SIZE))
+    """Meters to grid coordinates (Core conversion function)"""
+    # Assuming (MAP_WIDTH/2, MAP_HEIGHT/2) is the origin (0,0) in meters
+    return int(meters / GRID_CELL_SIZE + MAP_WIDTH/2)
 
-def lidar_point_to_grid(px, py, ROBOT_THETA, ROBOT_X, ROBOT_Y):
+def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles):
     """
-    Convert LiDAR point (relative to robot) to grid coordinates.
-    Accounts for robot's position and orientation.
+    LiDAR data processing: Generates a grid map (marking obstacles)
+    :param motion: [Distance moved, Angle change]
+    :param robot_x/robot_y/robot_theta: Robot's current pose
+    :param lidar: LiDAR device instance
+    :param particles: Particle filter (used for localization correction, though not fully implemented in this function's current use)
+    :return: The updated grid map
     """
-    # Rotate point by robot's orientation (theta)
-    rotated_x = px * math.cos(ROBOT_THETA) - py * math.sin(ROBOT_THETA)
-    rotated_y = px * math.sin(ROBOT_THETA) + py * math.cos(ROBOT_THETA)
+    # Initialize an empty grid map (0=Free, 1=Obstacle)
+    grid = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
     
-    # Convert to absolute position (world coordinates)
-    abs_x = ROBOT_X + rotated_x
-    abs_y = ROBOT_Y + rotated_y
+    # Get LiDAR range data
+    ranges = lidar.getRangeImage()
+    num_points = len(ranges)
+    min_range = lidar.getMinRange()
+    max_range = lidar.getMaxRange()
     
-    # Convert to grid coordinates
-    grid_x = meters_to_grid(abs_x)
-    grid_y = meters_to_grid(abs_y)
+    # LiDAR angular range: -π ~ π (360° scan)
+    total_angle = 2 * math.pi
+    angle_step = total_angle / num_points
     
-    return grid_x, grid_y
-
-# 
-def run_lidar(movement, ROBOT_X, ROBOT_Y, ROBOT_THETA, lidar, PARTICLES):
-    """Main loop to update grid with LiDAR data"""
-    
-    # Get LiDAR point cloud (list of (x, y, z) relative to robot)
-    point_cloud = lidar.getPointCloud()
-
-    PARTICLES = Particle_filter(PARTICLES, movement, point_cloud, grid)
-
-    #Uses highest probability to update position
-    temp = [x[3] for x in PARTICLES]
-    best = temp.index(max(temp))
-
-    ROBOT_X = PARTICLES[best][0]
-    ROBOT_Y = PARTICLES[best][1]
-    ROBOT_THETA = PARTICLES[best][2]
-    
-    for point in point_cloud:
-        px, py, pz = [point.x,point.y,point.z]  # pz is height (ignore for 2D mapping)
-        py = - py #As the map goes down for y-coordinates
-        distance = math.hypot(px, py)  # Distance from robot to point
-
-
+    # Iterate through all laser points and mark obstacles
+    for i in range(num_points):
+        distance = ranges[i]
+        # Filter invalid data (outside LiDAR detection range)
+        if not (math.isfinite(distance) and min_range < distance < max_range):
+            continue
         
-        # Filter valid wall points (0.1m to 5m to avoid noise/errors)
-        if 0.1 < distance < 5.0:
-            grid_x, grid_y = lidar_point_to_grid(px, py, ROBOT_THETA, ROBOT_X, ROBOT_Y)
-            
-            # Update grid if within bounds
-            if 0 <= grid_x < GRID_WIDTH and 0 <= grid_y < GRID_HEIGHT:
-                grid[grid_y][grid_x] = 1  # Mark as wall (1)
-
-    for c in grid :
-        print(c)
-
+        # Calculate the laser point's global angle
+        laser_angle = -math.pi + i * angle_step + robot_theta
+        # Calculate the obstacle's global coordinates
+        obs_x = robot_x + distance * math.cos(laser_angle)
+        obs_y = robot_y + distance * math.sin(laser_angle)
+        
+        # Convert to grid coordinates and mark
+        grid_x = meters_to_grid(obs_x)
+        grid_y = meters_to_grid(obs_y)
+        if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
+            grid[grid_y][grid_x] = 1
+    
     return grid
-               
+
+def save_grid_map(grid):
+    """Save the grid map to the controller directory (Generates grid_map.txt)"""
+    file_path = os.path.join(os.path.dirname(__file__), "grid_map.txt")
+    with open(file_path, "w", encoding="utf-8") as f:
+        for row in grid:
+            f.write(" ".join(map(str, row)) + "\n")
+    print(f"✅ Grid map saved: {os.path.abspath(file_path)}")
+
+def visualize_grid(grid):
+    """Console visualization of the center 30x30 grid (To view obstacles)"""
+    print("\n📊 Grid Map Center 30x30 Area (1=Obstacle):")
+    start = 35
+    end = 65
+    for y in range(start, end):
+        print(" ".join(map(str, grid[y][start:end])))
