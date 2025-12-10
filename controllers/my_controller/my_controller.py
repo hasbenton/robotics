@@ -1,12 +1,14 @@
 import math
+import numpy as np
 from statistics import mean
 from controller import Robot, Motor, PositionSensor, Lidar, DistanceSensor
 import lidar as l  # Only depends on the lidar module
+import A
 
 # ========== Basic Configuration (Fully adopting original working code parameters) ==========
 TIME_STEP = 32            # Webots time step (ms)
 MAX_VELOCITY = 26         # Max motor speed from original code
-DEAD_END_LIMIT = 0.6      # Dead end detection threshold (meters)
+DEAD_END_LIMIT = 0.2      # Dead end detection threshold (meters)
 COLLISION_THRESHOLD = 0.8 # Collision detection threshold
 base_speed = 6.0          # Base forward speed
 POSITION_MULTIPLIER = 23.199033988  # Position scaling factor
@@ -16,6 +18,19 @@ TRACK_WIDTH = 0.300       # Wheel track width (meters)
 ROBOT_X = 0.0
 ROBOT_Y = 0.0
 ROBOT_THETA = 0.0
+
+# [New] Navigation Goal Point (World coordinates, meters)
+GOAL_WORLD = (0, 1.5)
+
+# [New] State Machine
+STATE_PLANNING = 0
+STATE_FOLLOWING = 1
+STATE_IDLE = 2
+STATE_RECOVERING = 3 # [New] Dedicated recovery state to prevent getting stuck in the main loop
+current_state = STATE_PLANNING
+current_path = []   # Stores the path calculated by A* [(gx, gy), (gx, gy)...]
+path_index = 0      # Current index along the path
+recover_timer = 0    # Recovery countdown timer
 
 def init_robot_devices(robot):
     """Initialize devices (Fully matching device names in the user's working code)"""
@@ -90,9 +105,15 @@ def init_robot_devices(robot):
         "lidar": lidar
     }
 
+def normalize_angle(angle):
+    """[New] Angle normalization (-pi to pi)"""
+    while angle > math.pi: angle -= 2 * math.pi
+    while angle < -math.pi: angle += 2 * math.pi
+    return angle
+
 def main():
     # Correct global variable declaration position (Resolves SyntaxError)
-    global ROBOT_X, ROBOT_Y, ROBOT_THETA
+    global ROBOT_X, ROBOT_Y, ROBOT_THETA, current_state, current_path, path_index
     
     # Initialize robot instance
     robot = Robot()
@@ -116,6 +137,24 @@ def main():
     # Original code's Braitenberg obstacle avoidance coefficients
     coefficients = [[9.0, 15.0, -9.0, -15.0], [-9.0, -15.0, 9.0, 15.0]]
 
+    last_angle_error = 0.0
+    grid = [[0 for _ in range(100)] for _ in range(100)]
+    
+    # [New] Visit heatmap (records how many times each cell has been visited)
+    visit_map = np.zeros((100, 100))
+    
+    # [New] Variables for stuck detection
+    last_fl_val = 0.0
+    last_fr_val = 0.0
+    stuck_counter = 0 # Records the number of frames the robot has been stuck
+    
+    # [New] Spatio-temporal trap detection variables
+    trap_timer = 0
+    trap_start_x = ROBOT_X
+    trap_start_y = ROBOT_Y
+    
+    recovery_turn = 0
+    
     # Main loop (Core logic completely retained from original code)
     while robot.step(TIME_STEP) != -1:
         # 1. Read distance sensor values
@@ -127,9 +166,119 @@ def main():
         fl_val = distance_sensors_value[0]
         fr_val = distance_sensors_value[2]
         
-        # 2. U-turn logic (Highest priority)
         motor_speed = [0.0, 0.0]  # [Left wheel speed, Right wheel speed]
-        if turn_180_counter > 0:
+        
+        # ==========================================================
+        # [Ultimate Modification] 1. All-angle, three-in-one stuck detection
+        # ==========================================================
+        if current_state != STATE_IDLE and current_state != STATE_RECOVERING:
+            
+            # --- Metric A: Visual Stasis (Prevents wheel spin in place) ---
+            # Very little change in sensor readings means the robot hasn't moved relative to the wall
+            sensor_diff = abs(fl_val - last_fl_val) + abs(fr_val - last_fr_val)
+            is_visually_static = sensor_diff < 0.04
+            
+            # --- Metric B: Physical Stall (Prevents jamming) ---
+            # Get current encoder values, calculate actual wheel movement
+            curr_fl = devices["position_sensors"][0].getValue()
+            curr_fr = devices["position_sensors"][1].getValue()
+            encoder_move = (abs(curr_fl - front_left_last) + abs(curr_fr - front_right_last)) / 2.0
+            is_physically_stuck = encoder_move < 0.002
+            
+            # --- Metric C: Face-to-wall Deadlock (Prevents hard collisions) ---
+            # If too close to the wall (less than 15cm), regardless of being stuck,
+            # it's considered dangerous, forcing a reverse maneuver.
+            is_too_close = (fl_val < 0.15) or (fr_val < 0.15)
+            
+            # --- Comprehensive Judgment (Accumulate stuck count if any condition is met) ---
+            # Condition 1: Visual Stasis + Wall nearby
+            cond1 = is_visually_static and (fl_val < 0.25 or fr_val < 0.25)
+            # Condition 2: Physical Stall (Wheels can't push)
+            cond2 = is_physically_stuck
+            # Condition 3: Too close to the wall
+            cond3 = is_too_close
+            
+            if cond1 or cond2 or cond3:
+                stuck_counter += 1
+                # [Debug Info] Print every 10 frames to see why the count is accumulating
+                if stuck_counter % 10 == 0:
+                    print(f"DEBUG: Stuck count accumulating... {stuck_counter}/30 (Static:{cond1} Stalled:{cond2} TooClose:{cond3})")
+            else:
+                # Slowly reduce to prevent occasional normal stops from resetting it
+                stuck_counter = max(0, stuck_counter - 1)
+        
+        last_fl_val = fl_val
+        last_fr_val = fr_val
+
+        # Trigger Threshold: Accumulate to 30 points (approx. 1 second)
+        if stuck_counter > 30:
+            print(f"🚨 Confirmed stuck against wall (Dist:{fl_val:.2f}/{fr_val:.2f}) -> Starting Recovery!")
+            stuck_counter = 0
+            current_state = STATE_RECOVERING
+            recovery_phase = 1 
+            recover_timer = 20
+        
+        # ==========================================================
+        # [Logic 2] Spatio-temporal Trap Detection (Specifically solves the "shaking" problem)
+        # ==========================================================
+        if current_state != STATE_IDLE and current_state != STATE_RECOVERING:
+            trap_timer += 1
+            
+            # Check displacement every 100 frames (approx. 3.2 seconds)
+            if trap_timer > 100:
+                # Calculate distance moved in the last 3 seconds (Euclidean distance)
+                dist_moved = math.sqrt((ROBOT_X - trap_start_x)**2 + (ROBOT_Y - trap_start_y)**2)
+                
+                if dist_moved < 0.20: # Haven't moved 20cm in 3 seconds
+                    print(f"🚨 Detected shaking in place (3s displacement {dist_moved:.2f}m) -> Forced Recovery!")
+                    current_state = STATE_RECOVERING
+                    recovery_phase = 1
+                    recover_timer = 50
+                
+                # Reset timer and start point
+                trap_timer = 0
+                trap_start_x = ROBOT_X
+                trap_start_y = ROBOT_Y
+        else:
+            # If in recovery or idle, reset trap detection
+            trap_timer = 0
+            trap_start_x = ROBOT_X
+            trap_start_y = ROBOT_Y
+            
+        # --- State: Forceful Recovery (Direction-locked) ---
+        if current_state == STATE_RECOVERING:
+            if recovery_phase == 1:
+                # [Phase 1] Reverse
+                motor_speed = [-3.0, -3.0] 
+                recover_timer -= 1
+                if recover_timer <= 0:
+                    recovery_phase = 2
+                    recover_timer = 30 # Rotate for 1 second
+                    
+                    # [Key Point] Decide the rotation direction here and store it in recovery_turn
+                    if fl_val > fr_val:
+                        recovery_turn = 1  # Lock to left turn
+                    else:
+                        recovery_turn = -1 # Lock to right turn
+            
+            elif recovery_phase == 2:
+                # [Phase 2] Rotate (Only listens to recovery_turn, ignores sensors)
+                if recovery_turn == 1:
+                    motor_speed = [-5.0, 5.0] # Firm left turn
+                else:
+                    motor_speed = [5.0, -5.0] # Firm right turn
+                
+                recover_timer -= 1
+                if recover_timer <= 0:
+                    print(">>> Recovery complete, resetting state")
+                    current_state = STATE_PLANNING
+                    # plan_cooldown = 0 # Not used in final code
+                    last_angle_error = 0.0
+                    recovery_phase = 0
+                    recovery_turn = 0
+        
+        # 2. U-turn logic (Highest priority)
+        elif turn_180_counter > 0:
             turn_180_counter -= 1
             # In-place left turn (Left wheels reverse, Right wheels forward)
             motor_speed[0] = -MAX_VELOCITY * 0.8
@@ -141,24 +290,113 @@ def main():
             if fl_val < DEAD_END_LIMIT and fr_val < DEAD_END_LIMIT:
                 print("!!! Dead end/corner detected → Initiating 180-degree U-turn !!!")
                 turn_180_counter = TURN_STEPS_DURATION
+                motor_speed = [0, 0]
             else:
-                # Normal Braitenberg obstacle avoidance logic
-                avoidance_speed = [0.0, 0.0]
-                for i in range(2):
-                    for j in range(4):
-                        d = (2.0 - distance_sensors_value[j])
-                        avoidance_speed[i] += (d * d) * coefficients[i][j]
-                    motor_speed[i] = base_speed + avoidance_speed[i]
-                
-                # Fine-tuned avoidance adjustment (Original code logic)
-                if fl_val < COLLISION_THRESHOLD and fr_val < COLLISION_THRESHOLD:
-                    if abs(fl_val - fr_val) > 0.2:
-                        if fl_val > fr_val:
-                            motor_speed[0] = -MAX_VELOCITY * 0.5
-                            motor_speed[1] = MAX_VELOCITY * 0.5
+                if fl_val < 0.25 or fr_val < 0.25:
+                    ## In-place rotation for obstacle avoidance
+                    if fl_val < fr_val: motor_speed = [6.0, -6.0]
+                    else: motor_speed = [-6.0, 6.0]
+                    if current_state == STATE_FOLLOWING: current_state = STATE_PLANNING
+                       
+                # ==========================================================
+                # [New] 2. Safe Situation -> Execute A* Navigation Logic
+                # ==========================================================
+                else:
+                    # --- State: Path Planning ---
+                    if current_state == STATE_PLANNING:
+                        # Coordinate conversion: Meters -> Grid
+                        start_node = (l.meters_to_grid(ROBOT_X), l.meters_to_grid(ROBOT_Y))
+                        goal_node = (l.meters_to_grid(GOAL_WORLD[0]), l.meters_to_grid(GOAL_WORLD[1]))
+                        
+                        # Ensure grid exists (prevents error on first frame)
+                        if grid is not None:
+                            # [New] Create navigation-specific map (deep copy to avoid modifying original map)
+                            # This step temporarily turns "over-visited paths" into walls
+                            nav_grid = [row[:] for row in grid]
+                            
+                            # [Core Logic] Mark cells with excessive visits (>50) as obstacles (1)
+                            # The threshold 50 means if the robot stays in a cell for approx. 1.5 seconds, it's considered a "dead end"
+                            for y in range(100):
+                                for x in range(100):
+                                    if visit_map[y][x] > 50:
+                                        nav_grid[y][x] = 1
+                            
+                            # Ensure the Goal point itself is not marked as a wall (otherwise, no path will be found)
+                            nav_grid[goal_node[1]][goal_node[0]] = 0
+                            # Ensure the Start point itself is not marked as a wall (otherwise, it can't move)
+                            nav_grid[start_node[1]][start_node[0]] = 0
+
+                            # Use the nav_grid with virtual walls for planning
+                            path = A.a_star(nav_grid, start_node, goal_node)
                         else:
-                            motor_speed[0] = MAX_VELOCITY * 0.5
-                            motor_speed[1] = -MAX_VELOCITY * 0.5
+                            path = None
+                
+                        if path:
+                            current_path = path
+                            path_index = 0
+                            current_state = STATE_FOLLOWING
+                            print(f"Path found! Length: {len(path)}")
+                        else:
+                            motor_speed = [base_speed, base_speed] # Move boldly forward
+                            print("Path blocked -> Executing wall-following exploration...")
+                
+                    # --- State: Path Following ---
+                    elif current_state == STATE_FOLLOWING:
+                        if path_index < len(current_path):
+                            # Get target point and convert back to meters
+                            target_grid = current_path[path_index]
+                            target_x = l.grid_to_meters(target_grid[0])
+                            target_y = l.grid_to_meters(target_grid[1])
+                            
+                            # Calculate angle difference
+                            dx = target_x - ROBOT_X
+                            dy = target_y - ROBOT_Y
+                            target_angle = math.atan2(dy, dx)
+                            angle_diff = normalize_angle(target_angle - ROBOT_THETA)
+                            
+                            # Control Logic
+                            # --- Smooth Navigation ---
+                            cruise = 8.0
+                            turn = angle_diff * 4.0
+                            turn = max(-5.0, min(turn, 5.0))
+                            
+                            left_speed = cruise - turn
+                            right_speed = cruise + turn
+                            
+                            # [New] Virtual Repulsion (Soft Inflation)
+                            # Apply repulsive force when near a wall (< 0.35m)
+                            SAFE_DIST = 0.35
+                            PUSH_GAIN = 15.0
+                            
+                            if fl_val < SAFE_DIST:
+                                push = (SAFE_DIST - fl_val) * PUSH_GAIN
+                                left_speed += push
+                                right_speed -= push
+                            elif fr_val < SAFE_DIST:
+                                push = (SAFE_DIST - fr_val) * PUSH_GAIN
+                                left_speed -= push
+                                right_speed += push
+                                
+                            motor_speed = [left_speed, right_speed]
+                            # ==========================================================
+                            
+                            # Reached detection
+                            if math.sqrt(dx*dx + dy*dy) < 0.25:
+                                path_index += 1
+                        else:
+                            print("Destination Reached!")
+                            current_state = STATE_IDLE
+                            motor_speed = [0, 0]
+                            last_angle_error = 0.0
+                            
+                    # --- State: Idle ---
+                    elif current_state == STATE_IDLE:
+                        motor_speed = [0, 0]
+
+                # [New] If the robot entered "U-turn" or "Braitenberg" avoidance above,
+                # the PID was not run this frame, so the error must be reset to prevent D term explosion next time.
+                if current_state != STATE_FOLLOWING:
+                    last_angle_error = 0.0
 
         # 3. Speed limiting (Preventing exceeding max velocity)
         motor_speed[0] = max(-MAX_VELOCITY, min(motor_speed[0], MAX_VELOCITY))
@@ -183,19 +421,45 @@ def main():
         right_distance = mean([front_right_change, rear_right_change]) / POSITION_MULTIPLIER
         angle_change = (left_distance - right_distance) / TRACK_WIDTH
 
-        # Update robot pose
-        ROBOT_THETA += angle_change
-        ROBOT_X += distance * math.cos(ROBOT_THETA)
-        ROBOT_Y += distance * math.sin(ROBOT_THETA)
+        # ==========================================================
+        # [New] 3. Run Particle Filter to correct position
+        # ==========================================================
+        # Note: Need to pass the calculated distance and angle_change here
+        grid, PARTICLES, est_pos = l.run_lidar(
+            [distance, angle_change], 
+            ROBOT_X, ROBOT_Y, ROBOT_THETA, 
+            devices["lidar"], 
+            PARTICLES, 
+            grid
+        )
 
-        # Update position sensors' last-read values
+        # New: Update robot pose with Particle Filter's estimated result
+        ROBOT_X = est_pos[0]
+        ROBOT_Y = est_pos[1]
+        ROBOT_THETA = est_pos[2]
+        
+        # ==========================================================
+        # [New] Update Visit Heatmap (Memory footprint)
+        # ==========================================================
+        # 1. Calculate current grid cell coordinates
+        gx = l.meters_to_grid(ROBOT_X)
+        gy = l.meters_to_grid(ROBOT_Y)
+        
+        # 2. Increase the visit count for the current cell (the longer it stays, the higher the value)
+        if 0 <= gx < 100 and 0 <= gy < 100:
+            visit_map[gy][gx] += 1
+            
+        # 3. Memory Evaporation: Let old footprints slowly disappear
+        # This allows the robot to pass through here again after a while, preventing the path from being permanently blocked
+        visit_map *= 0.999
+        
+        # Update Last values
         front_left_last = devices["position_sensors"][0].getValue()
         front_right_last = devices["position_sensors"][1].getValue()
         rear_left_last = devices["position_sensors"][2].getValue()
         rear_right_last = devices["position_sensors"][3].getValue()
-
+        
         # 6. LiDAR grid map generation (Restoring saving + console printing)
-        grid = l.run_lidar([distance, angle_change], ROBOT_X, ROBOT_Y, ROBOT_THETA, devices["lidar"], PARTICLES)
         # Save + visualize every 20 steps (to avoid excessive printing)
         if robot.getTime() % (20 * TIME_STEP / 1000) < TIME_STEP / 1000:
             l.save_grid_map(grid)  # Generate grid_map.txt file
