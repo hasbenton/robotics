@@ -3,9 +3,10 @@ import os
 import numpy as np
 from controller import Lidar
 from particle_filter import Particle_filter
+import sys
 
 # ========== Grid Map Configuration ==========
-GRID_CELL_SIZE = 0.25    # Each grid cell represents 0.25 meters
+GRID_CELL_SIZE = 0.05    # Each grid cell represents 0.25 meters
 MAP_WIDTH = 100    # Grid map width (columns)
 MAP_HEIGHT = 100    # Grid map height (rows)
 
@@ -52,7 +53,8 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     
     # [New] 1. Must first get LiDAR point cloud data, define point_cloud variable
     point_cloud = lidar.getPointCloud()
-    
+    grid_x = 0
+    grid_y = 0
     # 3. [Core] Run Particle Filter (SLAM Localization Correction)
     # This step corrects particle positions based on LiDAR data
     # Pass in the grid generated in the previous frame (as map reference); can be empty for the first frame
@@ -63,11 +65,12 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     
     # 4. [Core] Calculate Best Estimated Position (Weighted average of all particles)
     # This is the "true" position after error elimination
-    est_x = np.mean([p[0] for p in particles])
-    est_y = np.mean([p[1] for p in particles])
-    est_theta = np.mean([p[2] for p in particles])
+    est_x = sum(point[0] * point[3] for point in particles) / sum(point[3] for point in particles)
+    est_y = sum(point[1] * point[3] for point in particles) / sum(point[3] for point in particles)
+    est_theta = - sum(point[2] * point[3] for point in particles) / sum(point[3] for point in particles)
     est_pos = [est_x, est_y, est_theta]
-    
+
+
     # Get LiDAR range data
     ranges = lidar.getRangeImage()
     num_points = len(ranges)
@@ -77,31 +80,55 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     # LiDAR angular range: -π ~ π (360° scan)
     total_angle = 2 * math.pi
     angle_step = total_angle / num_points
+
+    for point in point_cloud:
+        x,y = [point.x, point.y]
+
+        if (math.isfinite(x) or math.isfinite(y)):
+            distance = math.sqrt((x*x) + (y*y))
+            if min_range < distance < max_range:
+                x = x * math.cos(robot_theta) - y * math.sin(robot_theta)
+                y = x * math.sin(robot_theta) + y * math.cos(robot_theta)
+
+                x += robot_x
+                y += robot_y
+
+                grid_x = meters_to_grid(x)
+                grid_y = meters_to_grid(y)
+                if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
+                     grid[-grid_y][grid_x] = 1
+
     
-    # Iterate through all laser points and mark obstacles
-    for i in range(num_points):
-        distance = ranges[i]
-        # Filter invalid data (outside LiDAR detection range)
-        if not (math.isfinite(distance) and min_range < distance < max_range):
-            continue
+    # # Iterate through all laser points and mark obstacles
+    # for i in range(num_points):
+    #     distance = ranges[i]
+    #     # Filter invalid data (outside LiDAR detection range)
+    #     if not (math.isfinite(distance) and min_range < distance < max_range):
+    #         continue
         
-        # Calculate the laser point's global angle
-        laser_angle = -math.pi + i * angle_step + est_theta
-        # Calculate the obstacle's global coordinates
-        obs_x = est_x + distance * math.cos(laser_angle)
-        obs_y = est_y + distance * math.sin(laser_angle)
+    #     # Calculate the laser point's global angle
+    #     laser_angle = -math.pi + i * angle_step + est_theta
+    #     # Calculate the obstacle's global coordinates
+    #     obs_x = est_x + distance * math.cos(laser_angle)
+    #     obs_y = est_y + distance * math.sin(laser_angle)
         
-        # Convert to grid coordinates and mark
-        grid_x = meters_to_grid(obs_x)
-        grid_y = meters_to_grid(obs_y)
-        if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
-            grid[grid_y][grid_x] = 1
-            
+    #     # Convert to grid coordinates and mark
+    #     grid_x = meters_to_grid(obs_x)
+    #     grid_y = meters_to_grid(obs_y)
+    #     if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
+    #         grid[grid_y][grid_x] = 1
+    
+    grid_x = meters_to_grid(est_x)
+    grid_y = meters_to_grid(est_y)
+
+    if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
+        grid[grid_y][grid_x] = 2
+
     return grid, particles, est_pos
 
 def save_grid_map(grid):
     """Save the grid map to the controller directory (Generates grid_map.txt)"""
-    file_path = os.path.join(os.path.dirname(__file__), "grid_map.txt")
+    file_path = os.path.join(os.path.dirname(__file__), f"grid_map{sys.argv[1]}.txt")
     with open(file_path, "w", encoding="utf-8") as f:
         for row in grid:
             f.write(" ".join(map(str, row)) + "\n")

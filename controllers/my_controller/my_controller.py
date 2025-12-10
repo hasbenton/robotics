@@ -4,10 +4,11 @@ from statistics import mean
 from controller import Robot, Motor, PositionSensor, Lidar, DistanceSensor
 import lidar as l  # Only depends on the lidar module
 import A
+import sys
 
 # ========== Basic Configuration (Fully adopting original working code parameters) ==========
-TIME_STEP = 32            # Webots time step (ms)
-MAX_VELOCITY = 26         # Max motor speed from original code
+TIME_STEP = 32          # Webots time step (ms)
+MAX_VELOCITY = 2         # Max motor speed from original code
 DEAD_END_LIMIT = 0.2      # Dead end detection threshold (meters)
 COLLISION_THRESHOLD = 0.8 # Collision detection threshold
 base_speed = 6.0          # Base forward speed
@@ -15,9 +16,10 @@ POSITION_MULTIPLIER = 23.199033988  # Position scaling factor
 TRACK_WIDTH = 0.300       # Wheel track width (meters)
 
 # Robot initial pose (global variables)
-ROBOT_X = 0.0
-ROBOT_Y = 0.0
-ROBOT_THETA = 0.0
+initial_pos = sys.argv[1].split()
+ROBOT_X = int(initial_pos[0])
+ROBOT_Y = int(initial_pos[1])
+ROBOT_THETA = int(initial_pos[2])
 
 # [New] Navigation Goal Point (World coordinates, meters)
 GOAL_WORLD = (0, 1.5)
@@ -107,8 +109,8 @@ def init_robot_devices(robot):
 
 def normalize_angle(angle):
     """[New] Angle normalization (-pi to pi)"""
-    while angle > math.pi: angle -= 2 * math.pi
-    while angle < -math.pi: angle += 2 * math.pi
+    # while angle > math.pi: angle -= 2 * math.pi
+    # while angle < -math.pi: angle += 2 * math.pi
     return angle
 
 def main():
@@ -154,9 +156,13 @@ def main():
     trap_start_y = ROBOT_Y
     
     recovery_turn = 0
-    
+    count = 0
     # Main loop (Core logic completely retained from original code)
     while robot.step(TIME_STEP) != -1:
+        count += 1
+        #ALLOWS THE LIDAR TO SET UP
+        if count < 100 :
+            continue
         # 1. Read distance sensor values
         distance_sensors_value = [0.0]*4
         for i in range(4):
@@ -229,7 +235,7 @@ def main():
                 # Calculate distance moved in the last 3 seconds (Euclidean distance)
                 dist_moved = math.sqrt((ROBOT_X - trap_start_x)**2 + (ROBOT_Y - trap_start_y)**2)
                 
-                if dist_moved < 0.20: # Haven't moved 20cm in 3 seconds
+                if dist_moved < 0.05: # Haven't moved 20cm in 3 seconds
                     print(f"🚨 Detected shaking in place (3s displacement {dist_moved:.2f}m) -> Forced Recovery!")
                     current_state = STATE_RECOVERING
                     recovery_phase = 1
@@ -297,7 +303,7 @@ def main():
                     if fl_val < fr_val: motor_speed = [6.0, -6.0]
                     else: motor_speed = [-6.0, 6.0]
                     if current_state == STATE_FOLLOWING: current_state = STATE_PLANNING
-                       
+                        
                 # ==========================================================
                 # [New] 2. Safe Situation -> Execute A* Navigation Logic
                 # ==========================================================
@@ -458,12 +464,13 @@ def main():
         front_right_last = devices["position_sensors"][1].getValue()
         rear_left_last = devices["position_sensors"][2].getValue()
         rear_right_last = devices["position_sensors"][3].getValue()
-        
+
         # 6. LiDAR grid map generation (Restoring saving + console printing)
         # Save + visualize every 20 steps (to avoid excessive printing)
         if robot.getTime() % (20 * TIME_STEP / 1000) < TIME_STEP / 1000:
             l.save_grid_map(grid)  # Generate grid_map.txt file
-            l.visualize_grid(grid) # Console print the grid map
+            #l.visualize_grid(grid) # Console print the grid map
+
 
 if __name__ == "__main__":
     main()
