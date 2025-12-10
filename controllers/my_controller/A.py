@@ -1,99 +1,74 @@
+import heapq
+
 class Node:
-    """Represents a node in the A* algorithm."""
     def __init__(self, x, y, parent=None):
-        self.x = x          # Grid column (x-coordinate)
-        self.y = y          # Grid row (y-coordinate)
-        self.parent = parent# Parent node for path tracking
-        self.g = 0          # Cost from start to this node
-        self.h = 0          # Heuristic cost to goal
-        self.f = 0          # Total cost (g + h)
+        self.x = x
+        self.y = y
+        self.parent = parent
+        self.g = 0
+        self.h = 0
+        self.f = 0
     
-    def __eq__(self, other):
-        """Check if two nodes are the same (same coordinates)."""
-        return self.x == other.x and self.y == other.y
+    # [Critical Optimization] Allows nodes to be compared with the < operator, needed by heapq
+    def __lt__(self, other):
+        return self.f < other.f
 
 def a_star(grid, start, goal):
-    """
-    Find shortest path from start to goal using A* algorithm.
-    Args:
-        grid: 2D list (0 = free, 1 = obstacle)
-        start: (x, y) grid coordinates of start
-        goal: (x, y) grid coordinates of goal
-    Returns:
-        Path as list of (x, y) coordinates, or None if no path exists
-    """
-    # Initialize start and goal nodes
+    height = len(grid)
+    width = len(grid[0])
+    
+    if not (0 <= start[0] < width and 0 <= start[1] < height): return None
+    if not (0 <= goal[0] < width and 0 <= goal[1] < height): return None
+    if grid[start[1]][start[0]] == 1: return None
+
     start_node = Node(start[0], start[1])
     goal_node = Node(goal[0], goal[1])
     
-    # Open list (nodes to explore), closed list (nodes explored)
-    open_list = [start_node]
-    closed_list = []
+    # [Critical Optimization] Use a min-heap (Priority Queue) instead of list iteration
+    # This compresses multi-second calculations into milliseconds
+    open_list = []
+    heapq.heappush(open_list, (0, start_node))
     
-    while open_list:
-        # Get node with lowest f-cost
-        current_node = open_list[0]
-        current_idx = 0
-        for idx, node in enumerate(open_list):
-            if node.f < current_node.f:
-                current_node = node
-                current_idx = idx
-        
-        open_list.pop(current_idx)
-        closed_list.append(current_node)
-        
-        # Check if goal is reached
-        if current_node == goal_node:
-            path = []
-            current = current_node
-            while current:
-                path.append((current.x, current.y))
-                current = current.parent
-            return path[::-1]  # Reverse to get start -> goal
-        
-        # Generate 4-directional neighbors (up, down, left, right)
-        neighbors = []
-        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            x = current_node.x + dx
-            y = current_node.y + dy
-            
-            # Check if neighbor is within grid bounds and not an obstacle
-            if (0 <= x < len(grid[0])) and (0 <= y < len(grid)) and (grid[y][x] == 0):
-                neighbors.append(Node(x, y, current_node))
-        
-        # Evaluate neighbors
-        for neighbor in neighbors:
-            # Skip if neighbor is already explored
-            if neighbor in closed_list:
-                continue
-            
-            # Calculate costs
-            neighbor.g = current_node.g + 1  # Cost per step = 1
-            # Manhattan heuristic (distance in grid cells)
-            neighbor.h = abs(neighbor.x - goal_node.x) + abs(neighbor.y - goal_node.y)
-            neighbor.f = neighbor.g + neighbor.h
-            
-            # Skip if neighbor is in open list with lower cost
-            if any(neighbor == n and neighbor.g >= n.g for n in open_list):
-                continue
-            
-            open_list.append(neighbor)
+    closed_set = set()
+    g_score = {(start[0], start[1]): 0}
     
-    # No path found
-    return None
+    # 8 directional movements
+    movements = [
+        (0, -1, 1), (0, 1, 1), (-1, 0, 1), (1, 0, 1),
+        (-1, -1, 1.4), (-1, 1, 1.4), (1, -1, 1.4), (1, 1, 1.4)
+    ]
 
-# Example Usage
-if __name__ == "__main__":
-    # Define start and goal in grid coordinates (matches test_maps.py)
-    start = (1, 1)    # (x, y) in grid (inside map1's inner area)
-    goal = (20, 20)   # (x, y) in grid (opposite corner)
-    
-    # Find path
-    path = a_star(grid, start, goal)
-    
-    if path:
-        print("Shortest path (grid coordinates):")
-        for point in path:
-            print(f"({point[0]}, {point[1]})")
-    else:
-        print("No path exists!")
+    while open_list:
+        # Retrieves the minimum value in O(1), very fast
+        current_f, current_node = heapq.heappop(open_list)
+        
+        if (current_node.x, current_node.y) in closed_set: continue
+        
+        # Goal reached
+        if current_node.x == goal_node.x and current_node.y == goal_node.y:
+            path = []
+            curr = current_node
+            while curr:
+                path.append((curr.x, curr.y))
+                curr = curr.parent
+            return path[::-1]
+        
+        closed_set.add((current_node.x, current_node.y))
+        
+        for dx, dy, cost in movements:
+            nx, ny = current_node.x + dx, current_node.y + dy
+            
+            if not (0 <= nx < width and 0 <= ny < height): continue
+            if grid[ny][nx] == 1: continue
+            
+            new_g = current_node.g + cost
+            
+            if (nx, ny) not in g_score or new_g < g_score[(nx, ny)]:
+                g_score[(nx, ny)] = new_g
+                neighbor = Node(nx, ny, current_node)
+                neighbor.g = new_g
+                neighbor.h = abs(nx - goal_node.x) + abs(ny - goal_node.y)
+                neighbor.f = neighbor.g + neighbor.h
+                heapq.heappush(open_list, (neighbor.f, neighbor))
+                
+    return None
