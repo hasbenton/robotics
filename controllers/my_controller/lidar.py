@@ -2,14 +2,17 @@ import math
 import os
 import numpy as np
 from controller import Lidar
+from particle_filter import Particle_filter
 
 # ========== Grid Map Configuration ==========
-GRID_CELL_SIZE = 0.05    # Each grid cell represents 0.05 meters
-MAP_WIDTH = 100          # Grid map width (columns)
-MAP_HEIGHT = 100         # Grid map height (rows)
+GRID_CELL_SIZE = 0.25    # Each grid cell represents 0.25 meters
+MAP_WIDTH = 100    # Grid map width (columns)
+MAP_HEIGHT = 100    # Grid map height (rows)
+
+global_map = None    # Global accumulated map (empty initially)
 # ==================================
 
-def initialise(init_x, init_y, init_theta, num_particles=20):
+def initialise(init_x, init_y, init_theta, num_particles=50):
     """
     Particle filter initialization function (Resolves 'l.initialise' call error in my_controller)
     :param init_x: Robot initial X coordinate (meters)
@@ -20,8 +23,8 @@ def initialise(init_x, init_y, init_theta, num_particles=20):
     """
     particles = []
     for _ in range(num_particles):
-        x = init_x + np.random.normal(0, 0.05)  # Gaussian noise in X direction
-        y = init_y + np.random.normal(0, 0.05)  # Gaussian noise in Y direction
+        x = init_x + np.random.normal(0, 0.02)  # Gaussian noise in X direction
+        y = init_y + np.random.normal(0, 0.02)  # Gaussian noise in Y direction
         theta = init_theta + np.random.normal(0, 0.05)  # Gaussian noise in orientation
         weight = 1.0 / num_particles  # Initial weight is equally distributed
         particles.append([x, y, theta, weight])
@@ -32,17 +35,38 @@ def meters_to_grid(meters):
     # Assuming (MAP_WIDTH/2, MAP_HEIGHT/2) is the origin (0,0) in meters
     return int(meters / GRID_CELL_SIZE + MAP_WIDTH/2)
 
-def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles):
+def grid_to_meters(grid_index):
+    """[New] Grid index -> Meters (Used to convert A* path points back to world coordinates)"""
+    return (grid_index - MAP_WIDTH/2) * GRID_CELL_SIZE
+
+def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     """
     LiDAR data processing: Generates a grid map (marking obstacles)
     :param motion: [Distance moved, Angle change]
     :param robot_x/robot_y/robot_theta: Robot's current pose
     :param lidar: LiDAR device instance
-    :param particles: Particle filter (used for localization correction, though not fully implemented in this function's current use)
-    :return: The updated grid map
+    :param particles: Particle filter
+    :param grid: Current grid map
+    :return: The updated grid map, updated particles, and estimated pose
     """
-    # Initialize an empty grid map (0=Free, 1=Obstacle)
-    grid = [[0 for _ in range(MAP_WIDTH)] for _ in range(MAP_HEIGHT)]
+    
+    # [New] 1. Must first get LiDAR point cloud data, define point_cloud variable
+    point_cloud = lidar.getPointCloud()
+    
+    # 3. [Core] Run Particle Filter (SLAM Localization Correction)
+    # This step corrects particle positions based on LiDAR data
+    # Pass in the grid generated in the previous frame (as map reference); can be empty for the first frame
+    # Note: This is a simplification; actual SLAM requires a persistent global map
+    # Here, we primarily use it for Localization
+    if len(point_cloud) > 0:
+        particles = Particle_filter(particles, motion, point_cloud, grid)
+    
+    # 4. [Core] Calculate Best Estimated Position (Weighted average of all particles)
+    # This is the "true" position after error elimination
+    est_x = np.mean([p[0] for p in particles])
+    est_y = np.mean([p[1] for p in particles])
+    est_theta = np.mean([p[2] for p in particles])
+    est_pos = [est_x, est_y, est_theta]
     
     # Get LiDAR range data
     ranges = lidar.getRangeImage()
@@ -62,18 +86,18 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles):
             continue
         
         # Calculate the laser point's global angle
-        laser_angle = -math.pi + i * angle_step + robot_theta
+        laser_angle = -math.pi + i * angle_step + est_theta
         # Calculate the obstacle's global coordinates
-        obs_x = robot_x + distance * math.cos(laser_angle)
-        obs_y = robot_y + distance * math.sin(laser_angle)
+        obs_x = est_x + distance * math.cos(laser_angle)
+        obs_y = est_y + distance * math.sin(laser_angle)
         
         # Convert to grid coordinates and mark
         grid_x = meters_to_grid(obs_x)
         grid_y = meters_to_grid(obs_y)
         if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
             grid[grid_y][grid_x] = 1
-    
-    return grid
+            
+    return grid, particles, est_pos
 
 def save_grid_map(grid):
     """Save the grid map to the controller directory (Generates grid_map.txt)"""
