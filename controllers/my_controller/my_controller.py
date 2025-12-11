@@ -17,9 +17,9 @@ TRACK_WIDTH = 0.300       # Wheel track width (meters)
 
 # Robot initial pose (global variables)
 initial_pos = sys.argv[1].split()
-ROBOT_X = int(initial_pos[0])
-ROBOT_Y = int(initial_pos[1])
-ROBOT_THETA = int(initial_pos[2])
+ROBOT_X = float(initial_pos[0])
+ROBOT_Y = float(initial_pos[1])
+ROBOT_THETA = float(initial_pos[2])
 
 # [New] Navigation Goal Point (World coordinates, meters)
 GOAL_WORLD = (0, 1.5)
@@ -128,6 +128,10 @@ def main():
         print(e)
         return
     
+    rec = robot.getDevice("receiver")
+    emit = robot.getDevice("emitter")
+    rec.enable(5)
+
     # Initialize particle filter (Calling lidar's initialise function)
     PARTICLES = l.initialise(ROBOT_X, ROBOT_Y, ROBOT_THETA)
     print(f"✅ Particle filter initialized (Count: {len(PARTICLES)})")
@@ -469,7 +473,23 @@ def main():
         # Save + visualize every 20 steps (to avoid excessive printing)
         if robot.getTime() % (20 * TIME_STEP / 1000) < TIME_STEP / 1000:
             l.save_grid_map(grid)  # Generate grid_map.txt file
-            #l.visualize_grid(grid) # Console print the grid map
+            l.visualize_grid(grid) # Console print the grid map
+
+        if rec.getQueueLength() > 0:
+            if rec.getString() == "maps":
+                emit.send(robot.name + "|" + str(grid))
+            else:
+                result = str(rec.getString())
+                names = result.split("|")
+                if len(names) == 3:
+                    if names[0] or names[1] == robot.name:
+                        newMap = names[2]
+                        newMap = newMap[2:-2].split("], [")
+                        for i in range(len(newMap)):
+                            splitres = newMap[i].split(", ")
+                            newMap[i] = list(map(int, splitres))
+                        grid = newMap
+            rec.nextPacket()
 
 
 if __name__ == "__main__":

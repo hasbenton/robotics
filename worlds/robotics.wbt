@@ -4,7 +4,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/floors/protos/RectangleArena.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/objects/apartment_structure/protos/Wall.proto"
-EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2025a/projects/robots/husarion/rosbot/protos/Rosbot.proto"
+EXTERNPROTO "../protos/Rosbot.proto"
 
 WorldInfo {
 }
@@ -84,4 +84,14 @@ Rosbot {
     "0 -36 0"
   ]
   cameraSlot []
+}
+DEF Central Robot {
+  children [
+    Receiver {
+    }
+    Emitter {
+    }
+  ]
+  controller "central_controller"
+  supervisor TRUE
 }
