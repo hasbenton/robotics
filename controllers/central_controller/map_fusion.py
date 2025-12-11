@@ -21,8 +21,8 @@ def naieveFuse(map1, map2):
     for row1,row2 in zip(map1,map2):
         returnMap.append(list(map(lambda x, y: x or y, row1, row2)))
     
-    for row in returnMap:
-        print(row)
+    #for row in returnMap:
+    #    print(row)
     
     return returnMap
 

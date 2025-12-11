@@ -9,8 +9,8 @@ EXTERNPROTO "../protos/Rosbot.proto"
 WorldInfo {
 }
 Viewpoint {
-  orientation -0.6736401237948085 0.03777907472055898 0.7380933038085182 3.058856612542476
-  position 0.7187282787744379 -0.26549921534417453 10.204071500250855
+  orientation -0.6019280439446372 0.017173827458962225 0.7983656365121141 3.0960483085694896
+  position 3.7846585402248225 -0.39557206015387725 11.942925722633683
 }
 TexturedBackground {
 }
@@ -22,31 +22,35 @@ RectangleArena {
   wallHeight 0.5
 }
 Wall {
-  translation -0.2 -2 0
+  translation 1.50552 -1.52682 0
+  rotation 0 0 1 0.785398
   size 0.25 1 0.5
 }
 Wall {
-  translation -0.67 -0.36 0
+  translation -1.533 1.61 0
+  rotation 0 0 1 0.523599
   name "wall(4)"
   size 0.25 2.75 0.5
 }
 Wall {
-  translation -0.43 -1.617 0
+  translation 0.25 -1.617 0
   name "wall(5)"
   size 0.25 0.25 0.5
 }
 Wall {
-  translation 1.44 -1 0
+  translation -1.54 -1 0
   name "wall(1)"
   size 2 2 0.5
 }
 Wall {
-  translation -1.05 1.63 0
+  translation 0.71 1.99 0
+  rotation 0 0 1 0.523599
   name "wall(2)"
   size 3 0.25 0.5
 }
 Wall {
-  translation 1.06 1.25 0
+  translation 1.06 -0.04 0
+  rotation 0 0 1 0.523599
   name "wall(3)"
   size 0.25 1 0.5
 }
@@ -55,15 +59,15 @@ Rosbot {
   hidden position_0_1 -3.373051971067298e-08
   hidden position_0_2 2.5844644868179323e-08
   hidden position_0_3 2.588802027697095e-08
-  hidden rotation_2 0 -1 0 2.9802322387695313e-08
-  hidden rotation_3 0 -1 0 2.9802322387695313e-08
-  hidden rotation_4 0 1 0 2.9802322387695313e-08
-  hidden rotation_5 0 1 0 2.9802322387695313e-08
-  translation -3.2377649702474266e-05 2.1385002583274373e-06 -0.0005253077949940038
-  rotation -0.00016553834519507683 0.0001656491123814153 0.9999999725787135 1.5707800001297827
+  hidden rotation_4 0 1 0 0
+  hidden rotation_5 0 1 0 0
+  hidden rotation_6 0 1 0 0
+  hidden rotation_7 0 1 0 2.9802322387695313e-08
+  translation 0.178467 -0.72679 -0.000226934
+  rotation 0 0 1 1.5708
   controller "my_controller"
   controllerArgs [
-    "0 0 0"
+    "-0.727 0.178 0"
   ]
   cameraSlot []
 }
@@ -72,16 +76,20 @@ Rosbot {
   hidden position_0_1 -3.373051971067298e-08
   hidden position_0_2 2.5844644868179323e-08
   hidden position_0_3 2.588802027697095e-08
-  hidden rotation_2 0 -1 0 2.9802322387695313e-08
-  hidden rotation_3 0 -1 0 2.9802322387695313e-08
-  hidden rotation_4 0 1 0 2.9802322387695313e-08
-  hidden rotation_5 0 1 0 2.9802322387695313e-08
-  translation -1.70003 3.1574e-05 0.0994747
-  rotation -0.00016553834519507683 0.0001656491123814153 0.9999999725787135 1.5707800001297827
+  hidden translation_4 0.05 0.11 0.043
+  hidden rotation_4 0 1 0 0
+  hidden translation_5 0.05 -0.11 0.043
+  hidden rotation_5 0 1 0 0
+  hidden translation_6 -0.055 0.11 0.043
+  hidden rotation_6 0 1 0 0
+  hidden translation_7 -0.055 -0.11 0.043
+  hidden rotation_7 0 1 0 0
+  translation 1.63452 0.3689 -0.000503439
+  rotation 0 0 1 1.5708
   name "rosbot(1)"
   controller "my_controller"
   controllerArgs [
-    "0 -36 0"
+    "0.369 1.63 0"
   ]
   cameraSlot []
 }

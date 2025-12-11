@@ -91,7 +91,7 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
                 y = x * math.sin(robot_theta) + y * math.cos(robot_theta)
 
                 x += robot_x
-                y += robot_y
+                y -= robot_y
 
                 grid_x = meters_to_grid(x)
                 grid_y = meters_to_grid(y)
@@ -121,12 +121,13 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     grid_x = meters_to_grid(est_x)
     grid_y = meters_to_grid(est_y)
 
-    if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
-        grid[grid_y][grid_x] = 2
+    # if 0 <= grid_x < MAP_WIDTH and 0 <= grid_y < MAP_HEIGHT:
+    #     grid[grid_y][grid_x] = 2
 
     return grid, particles, est_pos
 
 def save_grid_map(grid):
+    return
     """Save the grid map to the controller directory (Generates grid_map.txt)"""
     file_path = os.path.join(os.path.dirname(__file__), f"grid_map{sys.argv[1]}.txt")
     with open(file_path, "w", encoding="utf-8") as f:
@@ -135,6 +136,7 @@ def save_grid_map(grid):
     print(f"✅ Grid map saved: {os.path.abspath(file_path)}")
 
 def visualize_grid(grid):
+    return
     """Console visualization of the center 30x30 grid (To view obstacles)"""
     print("\n📊 Grid Map Center 30x30 Area (1=Obstacle):")
     start = 35

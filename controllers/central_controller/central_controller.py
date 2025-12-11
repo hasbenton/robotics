@@ -1,5 +1,6 @@
 from controller import Robot, Supervisor, Emitter, Receiver
 from map_fusion import fuse, naieveFuse
+import os
 
 TIME_STEP = 32
 
@@ -10,11 +11,12 @@ rec = robot.getDevice("receiver")
 emit = robot.getDevice("emitter")
 rec.enable(5)
 count = 0
+x = 0
 maps = {}
 
 while robot.step(TIME_STEP) != -1:
     count += 1
-    if count > 250:
+    if count > 100:
         emit.send("maps")
         count = 0
 
@@ -34,3 +36,11 @@ while robot.step(TIME_STEP) != -1:
         bot2 = list(maps)[1]
         fused = naieveFuse(maps.pop(bot1), maps.pop(bot2))
         emit.send(bot1 + "|" + bot2 + "|" + str(fused))
+
+        x += 1
+
+        file_path = os.path.join(os.path.dirname(__file__), f"output{x}.txt")
+        with open(file_path, "w", encoding="utf-8") as f:
+            for row in fused:
+                f.write(" ".join(map(str, row)) + "\n")
+        print(f"✅ Grid map saved: {os.path.abspath(file_path)}")
