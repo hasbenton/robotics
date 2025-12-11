@@ -202,8 +202,6 @@ def main():
             
             if cond1 or cond2 or cond3:
                 stuck_counter += 1
-                if stuck_counter % 10 == 0:
-                    print(Stuck count accumulating)
             else:
                 # Slowly reduce to prevent occasional normal stops from resetting it.
                 stuck_counter = max(0, stuck_counter - 1)
