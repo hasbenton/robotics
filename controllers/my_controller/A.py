@@ -9,7 +9,6 @@ class Node:
         self.h = 0
         self.f = 0
     
-    # Needed by heapq
     def __lt__(self, other):
         return self.f < other.f
 
@@ -32,12 +31,14 @@ def a_star(grid, start, goal):
     
     # 8 directional movements
     movements = [
-        (0, -1, 1), (0, 1, 1), (-1, 0, 1), (1, 0, 1),
-        (-1, -1, 1.4), (-1, 1, 1.4), (1, -1, 1.4), (1, 1, 1.4)
+        (0, -1, 1), (0, 1, 1), 
+        (-1, 0, 1), (1, 0, 1),
+        (-1, -1, 1.4), (-1, 1, 1.4), 
+        (1, -1, 1.4), (1, 1, 1.4)
     ]
 
     while open_list:
-        # Retrieves the minimum value in O(1), very fast
+        # Retrieves the minimum value in O(1)
         current_f, current_node = heapq.heappop(open_list)
         
         if (current_node.x, current_node.y) in closed_set: continue
