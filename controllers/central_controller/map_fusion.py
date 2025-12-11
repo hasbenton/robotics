@@ -16,6 +16,16 @@ test_map_2 = [
     [0,0,0,0,0],
 ]
 
+def naieveFuse(map1, map2):
+    returnMap = []
+    for row1,row2 in zip(map1,map2):
+        returnMap.append(list(map(lambda x, y: x or y, row1, row2)))
+    
+    for row in returnMap:
+        print(row)
+    
+    return returnMap
+
 def fuse(map1, map2):
     m1Ones = []
     for x in range(len(map1)):
@@ -77,8 +87,8 @@ def fuse(map1, map2):
     #shiftToTop(returnMap, offset)
 
     #print(offset)
-    #for row in returnMap:
-        #print(row)
+    for row in returnMap:
+        print(row)
     return returnMap#, offset
 
 def align(inputMap, offset):

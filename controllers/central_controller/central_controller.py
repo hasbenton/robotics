@@ -1,5 +1,5 @@
 from controller import Robot, Supervisor, Emitter, Receiver
-from map_fusion import fuse
+from map_fusion import fuse, naieveFuse
 
 TIME_STEP = 32
 
@@ -14,7 +14,7 @@ maps = {}
 
 while robot.step(TIME_STEP) != -1:
     count += 1
-    if count > 100:
+    if count > 250:
         emit.send("maps")
         count = 0
 
@@ -32,5 +32,5 @@ while robot.step(TIME_STEP) != -1:
         print("Fusing")
         bot1 = list(maps)[0]
         bot2 = list(maps)[1]
-        fused = fuse(maps.pop(bot1), maps.pop(bot2))
-        emit.send(bot1 + "|" + bot2 + "|" + fused)
+        fused = naieveFuse(maps.pop(bot1), maps.pop(bot2))
+        emit.send(bot1 + "|" + bot2 + "|" + str(fused))
