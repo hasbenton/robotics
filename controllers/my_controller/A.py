@@ -9,7 +9,7 @@ class Node:
         self.h = 0
         self.f = 0
     
-    # [Critical Optimization] Allows nodes to be compared with the < operator, needed by heapq
+    # Needed by heapq
     def __lt__(self, other):
         return self.f < other.f
 
@@ -24,8 +24,6 @@ def a_star(grid, start, goal):
     start_node = Node(start[0], start[1])
     goal_node = Node(goal[0], goal[1])
     
-    # [Critical Optimization] Use a min-heap (Priority Queue) instead of list iteration
-    # This compresses multi-second calculations into milliseconds
     open_list = []
     heapq.heappush(open_list, (0, start_node))
     
