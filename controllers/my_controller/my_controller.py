@@ -40,7 +40,6 @@ def init_robot_devices(robot):
     lidar = robot.getDevice('laser')
     lidar.enable(TIME_STEP)
     lidar.enablePointCloud()  # Enable 3D point cloud
-    print("✅ LiDAR initialization successful (3D point cloud enabled)")
 
     # Initialize four motors
     front_left_motor = robot.getDevice("fl_wheel_joint")
@@ -54,9 +53,8 @@ def init_robot_devices(robot):
     for name, motor in zip(motor_names, motors):
         if motor is None:
             raise ValueError(f"❌ Motor not found: {name}")
-    print("✅ Four motors initialized successfully")
-
-    # 3. Initialize four position sensors
+            
+    # Initialize four position sensors
     front_left_position = robot.getDevice("front left wheel motor sensor")
     front_right_position = robot.getDevice("front right wheel motor sensor")
     rear_left_position = robot.getDevice("rear left wheel motor sensor")
@@ -78,7 +76,6 @@ def init_robot_devices(robot):
     front_right_position.enable(TIME_STEP)
     rear_left_position.enable(TIME_STEP)
     rear_right_position.enable(TIME_STEP)
-    print("✅ Four position sensors initialized successfully")
 
     # Initialize distance sensors
     distance_sensors = [
@@ -91,9 +88,6 @@ def init_robot_devices(robot):
     for name, ds in zip(ds_names, distance_sensors):
         if ds:
             ds.enable(TIME_STEP)
-            print(f"✅ Distance sensor {name} initialized successfully")
-        else:
-            print(f"⚠️ Distance sensor not found: {name} (Obstacle avoidance might be affected)")
 
     # Set motors to velocity mode
     for motor in motors:
@@ -118,7 +112,6 @@ def main():
     
     # Initialize robot instance
     robot = Robot()
-    print(f"\n🚀 Controller started successfully! Time step: {TIME_STEP}ms")
     
     # Initialize all devices
     try:
@@ -133,7 +126,6 @@ def main():
 
     # Initialize particle filter 
     PARTICLES = l.initialise(ROBOT_X, ROBOT_Y, ROBOT_THETA)
-    print(f"✅ Particle filter initialized (Count: {len(PARTICLES)})")
 
     # Initialize variables
     front_left_last = front_right_last = rear_left_last = rear_right_last = 0
@@ -276,12 +268,10 @@ def main():
             # In-place left turn (Left wheels reverse, Right wheels forward)
             motor_speed[0] = -MAX_VELOCITY * 0.8
             motor_speed[1] = MAX_VELOCITY * 0.8
-            if turn_180_counter == 0:
-                print(">>> U-turn completed, resuming normal avoidance logic")
+
         else:
             # Dead end detection (Triggers U-turn)
             if fl_val < DEAD_END_LIMIT and fr_val < DEAD_END_LIMIT:
-                print("!!! Dead end/corner detected → Initiating 180-degree U-turn !!!")
                 turn_180_counter = TURN_STEPS_DURATION
                 motor_speed = [0, 0]
             else:
@@ -324,10 +314,8 @@ def main():
                             current_path = path
                             path_index = 0
                             current_state = STATE_FOLLOWING
-                            print(f"Path found! Length: {len(path)}")
                         else:
                             motor_speed = [base_speed, base_speed]
-                            print("Path blocked -> Executing wall-following exploration...")
                 
                     # Path Following
                     elif current_state == STATE_FOLLOWING:
