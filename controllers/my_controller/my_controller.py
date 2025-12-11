@@ -2,7 +2,7 @@ import math
 import numpy as np
 from statistics import mean
 from controller import Robot, Motor, PositionSensor, Lidar, DistanceSensor
-import lidar as l  # Only depends on the lidar module
+import lidar as l
 import A
 import sys
 
@@ -38,7 +38,7 @@ def init_robot_devices(robot):
     # Configure LiDAR
     lidar = robot.getDevice('laser')
     lidar.enable(TIME_STEP)
-    lidar.enablePointCloud()  # Enable 3D point cloud
+    lidar.enablePointCloud() 
 
     # Initialize four motors
     front_left_motor = robot.getDevice("fl_wheel_joint")
@@ -106,7 +106,7 @@ def normalize_angle(angle):  #Angle normalization (-pi to pi)
     return angle
 
 def main():
-    # Correct global variable declaration position
+    # Global variable declaration position
     global ROBOT_X, ROBOT_Y, ROBOT_THETA, current_state, current_path, path_index
     
     # Initialize robot instance
@@ -141,7 +141,7 @@ def main():
     # Variables for stuck detection
     last_fl_val = 0.0
     last_fr_val = 0.0
-    stuck_counter = 0 # Records the number of frames the robot has been stuck
+    stuck_counter = 0 
     
     # trap detection variables
     trap_timer = 0
@@ -153,7 +153,6 @@ def main():
     # Main loop
     while robot.step(TIME_STEP) != -1:
         count += 1
-        # ALLOWS THE LIDAR TO SET UP
         if count < 100 :
             continue
         # Read distance sensor values
@@ -256,12 +255,11 @@ def main():
                 if recover_timer <= 0:
                     print(">>> Recovery complete, resetting state")
                     current_state = STATE_PLANNING
-                    # plan_cooldown = 0 # Not used in final code
                     last_angle_error = 0.0
                     recovery_phase = 0
                     recovery_turn = 0
         
-        # 2. U-turn logic (Highest priority)
+        # 2. U-turn logic
         elif turn_180_counter > 0:
             turn_180_counter -= 1
             # In-place left turn (Left wheels reverse, Right wheels forward)
