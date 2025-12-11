@@ -35,7 +35,7 @@ def a_star(raw_grid, p_start, p_goal):
     _checked_set = set()
     _best_cost_map = {(sx, sy): 0}
     
-    # 8 directional movements
+    # Directional movements
     _dirs = [
         (0, -1, 1), (0, 1, 1),      
         (-1, 0, 1), (1, 0, 1),      
