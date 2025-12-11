@@ -16,6 +16,7 @@ test_map_2 = [
     [0,0,0,0,0],
 ]
 
+# basic fuse to get functionality
 def naieveFuse(map1, map2):
     returnMap = []
     for row1,row2 in zip(map1,map2):
@@ -28,12 +29,14 @@ def naieveFuse(map1, map2):
 
 def fuse(map1, map2):
     m1Ones = []
+    # find all 1s in map 1
     for x in range(len(map1)):
         for y in range(len(map1[x])):
             if map1[x][y] == 1:
                 m1Ones.append([x,y])
 
     m2Ones = []
+    # find all 1s in map 2
     for x in range(len(map2)):
         for y in range(len(map2[x])):
             if map2[x][y] == 1:
@@ -45,6 +48,7 @@ def fuse(map1, map2):
             offset = []
             offset.append(m2Coord[0] - m1Coord[0])
             offset.append(m2Coord[1] - m1Coord[1])
+            # shift map1 to align itself with the 1 in map 2
             alignedMap = align(map1, offset)
             sim = 0
             for m1row, m2row in zip(alignedMap,map2):
@@ -54,6 +58,7 @@ def fuse(map1, map2):
             if sim > similarity[0]:
                 similarity = [sim, offset]
 
+    # same as align function except it doesnt remove data so it expands the map
     offset = similarity[1]
     copiedOffset = offset.copy()
     while copiedOffset[0] > 0:
@@ -81,20 +86,22 @@ def fuse(map1, map2):
         copiedOffset[1] += 1
 
     returnMap = []
+    # overlay the two maps
     for row1,row2 in zip(map1,map2):
         returnMap.append(list(map(lambda x, y: x or y, row1, row2)))
     
-    #shiftToTop(returnMap, offset)
+    shiftToTop(returnMap, offset)
 
     #print(offset)
     for row in returnMap:
         print(row)
     return returnMap#, offset
 
+# given a map and an offset move the map to that offset
+# deletes data to preserve shape
 def align(inputMap, offset):
     copiedList = deepcopy(inputMap)
     copiedOffset = deepcopy(offset)
-    # y,x
 
     while copiedOffset[1] > 0:
         for row in copiedList:
@@ -120,6 +127,7 @@ def align(inputMap, offset):
 
     return copiedList
 
+# move the map to the top left of the map to preserve space
 def shiftToTop(inputMap, offset):
     if 1 not in inputMap[0]:
         inputMap.pop(0)

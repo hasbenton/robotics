@@ -16,10 +16,12 @@ maps = {}
 
 while robot.step(TIME_STEP) != -1:
     count += 1
+    # requests maps every 100 itterations
     if count > 100:
         emit.send("maps")
         count = 0
 
+    # while it has received a map
     if rec.getQueueLength() > 0:
         result = str(rec.getString())
         name, result = result.split("|")
@@ -30,6 +32,7 @@ while robot.step(TIME_STEP) != -1:
         maps[name] = result
         rec.nextPacket()
 
+    # if there are 2 or more maps currently, fuse them
     if len(maps) > 1:
         print("Fusing")
         bot1 = list(maps)[0]
