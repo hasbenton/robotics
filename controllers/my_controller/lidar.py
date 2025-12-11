@@ -37,7 +37,7 @@ def meters_to_grid(meters):
     return int(meters / GRID_CELL_SIZE + MAP_WIDTH/2)
 
 def grid_to_meters(grid_index):
-    """[New] Grid index -> Meters (Used to convert A* path points back to world coordinates)"""
+    """Grid index to Meters (Used to convert A* path points back to world coordinates)"""
     return (grid_index - MAP_WIDTH/2) * GRID_CELL_SIZE
 
 def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
@@ -51,11 +51,11 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     :return: The updated grid map, updated particles, and estimated pose
     """
     
-    # [New] 1. Must first get LiDAR point cloud data, define point_cloud variable
+    # Define point_cloud variable
     point_cloud = lidar.getPointCloud()
     grid_x = 0
     grid_y = 0
-    # 3. [Core] Run Particle Filter (SLAM Localization Correction)
+    # Run Particle Filter (SLAM Localization Correction)
     # This step corrects particle positions based on LiDAR data
     # Pass in the grid generated in the previous frame (as map reference); can be empty for the first frame
     # Note: This is a simplification; actual SLAM requires a persistent global map
@@ -63,8 +63,7 @@ def run_lidar(motion, robot_x, robot_y, robot_theta, lidar, particles, grid):
     if len(point_cloud) > 0:
         particles = Particle_filter(particles, motion, point_cloud, grid)
     
-    # 4. [Core] Calculate Best Estimated Position (Weighted average of all particles)
-    # This is the "true" position after error elimination
+    # Calculate Best Estimated Position (Weighted average of all particles)
     est_x = sum(point[0] * point[3] for point in particles) / sum(point[3] for point in particles)
     est_y = sum(point[1] * point[3] for point in particles) / sum(point[3] for point in particles)
     est_theta = - sum(point[2] * point[3] for point in particles) / sum(point[3] for point in particles)
