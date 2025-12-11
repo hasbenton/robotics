@@ -51,7 +51,7 @@ def init_robot_devices(robot):
     motor_names = ["fl_wheel_joint", "fr_wheel_joint", "rl_wheel_joint", "rr_wheel_joint"]
     for name, motor in zip(motor_names, motors):
         if motor is None:
-            raise ValueError(f"❌ Motor not found: {name}")
+            raise ValueError("Error: Could not find motor " + name)
             
     # Initialize four position sensors
     front_left_position = robot.getDevice("front left wheel motor sensor")
@@ -69,7 +69,7 @@ def init_robot_devices(robot):
     ]
     for name, sensor in zip(sensor_names, sensors):
         if sensor is None:
-            raise ValueError(f"❌ Position sensor not found: {name}")
+            raise ValueError("Error: Could not find position sensor " + name)
     # Enable position sensors
     front_left_position.enable(TIME_STEP)
     front_right_position.enable(TIME_STEP)
