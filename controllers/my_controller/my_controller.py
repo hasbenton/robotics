@@ -35,7 +35,6 @@ path_index = 0      # Current index along the path
 recover_timer = 0    # Recovery countdown timer
 
 def init_robot_devices(robot):
-    """Initialize devices (Fully matching device names in the user's working code)"""
     # Configure LiDAR
     lidar = robot.getDevice('laser')
     lidar.enable(TIME_STEP)
