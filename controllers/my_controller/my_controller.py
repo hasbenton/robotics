@@ -6,7 +6,7 @@ import lidar as l  # Only depends on the lidar module
 import A
 import sys
 
-# ========== Basic Configuration (Fully adopting original working code parameters) ==========
+# Basic Configuration
 TIME_STEP = 32          # Webots time step (ms)
 MAX_VELOCITY = 2         # Max motor speed from original code
 DEAD_END_LIMIT = 0.2      # Dead end detection threshold (meters)
@@ -21,14 +21,14 @@ ROBOT_X = float(initial_pos[0])
 ROBOT_Y = float(initial_pos[1])
 ROBOT_THETA = float(initial_pos[2])
 
-# [New] Navigation Goal Point (World coordinates, meters)
+# Navigation Goal Point
 GOAL_WORLD = (0, 1.5)
 
-# [New] State Machine
+# State Machine
 STATE_PLANNING = 0
 STATE_FOLLOWING = 1
 STATE_IDLE = 2
-STATE_RECOVERING = 3 # [New] Dedicated recovery state to prevent getting stuck in the main loop
+STATE_RECOVERING = 3 # Dedicated recovery state to prevent getting stuck in the main loop
 current_state = STATE_PLANNING
 current_path = []   # Stores the path calculated by A* [(gx, gy), (gx, gy)...]
 path_index = 0      # Current index along the path
@@ -36,13 +36,13 @@ recover_timer = 0    # Recovery countdown timer
 
 def init_robot_devices(robot):
     """Initialize devices (Fully matching device names in the user's working code)"""
-    # 1. Configure LiDAR (keeping 3D point cloud feature)
+    # Configure LiDAR
     lidar = robot.getDevice('laser')
     lidar.enable(TIME_STEP)
-    lidar.enablePointCloud()  # Enable 3D point cloud (original code logic)
+    lidar.enablePointCloud()  # Enable 3D point cloud
     print("✅ LiDAR initialization successful (3D point cloud enabled)")
 
-    # 2. Initialize four motors (Original working code motor names)
+    # Initialize four motors
     front_left_motor = robot.getDevice("fl_wheel_joint")
     front_right_motor = robot.getDevice("fr_wheel_joint")
     rear_left_motor = robot.getDevice("rl_wheel_joint")
@@ -56,7 +56,7 @@ def init_robot_devices(robot):
             raise ValueError(f"❌ Motor not found: {name}")
     print("✅ Four motors initialized successfully")
 
-    # 3. Initialize four position sensors (Original working code sensor names)
+    # 3. Initialize four position sensors
     front_left_position = robot.getDevice("front left wheel motor sensor")
     front_right_position = robot.getDevice("front right wheel motor sensor")
     rear_left_position = robot.getDevice("rear left wheel motor sensor")
@@ -80,7 +80,7 @@ def init_robot_devices(robot):
     rear_right_position.enable(TIME_STEP)
     print("✅ Four position sensors initialized successfully")
 
-    # 4. Initialize distance sensors (Original code's 4 sensors)
+    # Initialize distance sensors
     distance_sensors = [
         robot.getDevice("fl_range"),
         robot.getDevice("rl_range"),
@@ -95,7 +95,7 @@ def init_robot_devices(robot):
         else:
             print(f"⚠️ Distance sensor not found: {name} (Obstacle avoidance might be affected)")
 
-    # 5. Set motors to velocity mode (Original code logic)
+    # Set motors to velocity mode
     for motor in motors:
         motor.setPosition(float('inf'))
         motor.setVelocity(0.0)
@@ -107,14 +107,13 @@ def init_robot_devices(robot):
         "lidar": lidar
     }
 
-def normalize_angle(angle):
-    """[New] Angle normalization (-pi to pi)"""
-    # while angle > math.pi: angle -= 2 * math.pi
-    # while angle < -math.pi: angle += 2 * math.pi
+def normalize_angle(angle):  #Angle normalization (-pi to pi)
+    while angle > math.pi: angle -= 2 * math.pi
+    while angle < -math.pi: angle += 2 * math.pi
     return angle
 
 def main():
-    # Correct global variable declaration position (Resolves SyntaxError)
+    # Correct global variable declaration position
     global ROBOT_X, ROBOT_Y, ROBOT_THETA, current_state, current_path, path_index
     
     # Initialize robot instance
@@ -132,42 +131,41 @@ def main():
     emit = robot.getDevice("emitter")
     rec.enable(5)
 
-    # Initialize particle filter (Calling lidar's initialise function)
+    # Initialize particle filter 
     PARTICLES = l.initialise(ROBOT_X, ROBOT_Y, ROBOT_THETA)
     print(f"✅ Particle filter initialized (Count: {len(PARTICLES)})")
 
-    # Initialize variables (Fully adopting original code)
+    # Initialize variables
     front_left_last = front_right_last = rear_left_last = rear_right_last = 0
     turn_180_counter = 0
-    TURN_STEPS_DURATION = 5  # U-turn duration in steps
-    # Original code's Braitenberg obstacle avoidance coefficients
+    TURN_STEPS_DURATION = 5 
     coefficients = [[9.0, 15.0, -9.0, -15.0], [-9.0, -15.0, 9.0, 15.0]]
 
     last_angle_error = 0.0
     grid = [[0 for _ in range(100)] for _ in range(100)]
     
-    # [New] Visit heatmap (records how many times each cell has been visited)
+    # Visit heatmap
     visit_map = np.zeros((100, 100))
     
-    # [New] Variables for stuck detection
+    # Variables for stuck detection
     last_fl_val = 0.0
     last_fr_val = 0.0
     stuck_counter = 0 # Records the number of frames the robot has been stuck
     
-    # [New] Spatio-temporal trap detection variables
+    # trap detection variables
     trap_timer = 0
     trap_start_x = ROBOT_X
     trap_start_y = ROBOT_Y
     
     recovery_turn = 0
     count = 0
-    # Main loop (Core logic completely retained from original code)
+    # Main loop
     while robot.step(TIME_STEP) != -1:
         count += 1
-        #ALLOWS THE LIDAR TO SET UP
+        # ALLOWS THE LIDAR TO SET UP
         if count < 100 :
             continue
-        # 1. Read distance sensor values
+        # Read distance sensor values
         distance_sensors_value = [0.0]*4
         for i in range(4):
             if devices["distance_sensors"][i]:
@@ -178,43 +176,36 @@ def main():
         
         motor_speed = [0.0, 0.0]  # [Left wheel speed, Right wheel speed]
         
-        # ==========================================================
-        # [Ultimate Modification] 1. All-angle, three-in-one stuck detection
-        # ==========================================================
+        # Stuck detection
         if current_state != STATE_IDLE and current_state != STATE_RECOVERING:
             
-            # --- Metric A: Visual Stasis (Prevents wheel spin in place) ---
+            # Visual Stasis (Prevents wheel spin in place)
             # Very little change in sensor readings means the robot hasn't moved relative to the wall
             sensor_diff = abs(fl_val - last_fl_val) + abs(fr_val - last_fr_val)
             is_visually_static = sensor_diff < 0.04
             
-            # --- Metric B: Physical Stall (Prevents jamming) ---
+            # Physical Stall
             # Get current encoder values, calculate actual wheel movement
             curr_fl = devices["position_sensors"][0].getValue()
             curr_fr = devices["position_sensors"][1].getValue()
             encoder_move = (abs(curr_fl - front_left_last) + abs(curr_fr - front_right_last)) / 2.0
             is_physically_stuck = encoder_move < 0.002
             
-            # --- Metric C: Face-to-wall Deadlock (Prevents hard collisions) ---
-            # If too close to the wall (less than 15cm), regardless of being stuck,
-            # it's considered dangerous, forcing a reverse maneuver.
+            # Close to wall
+            # If too close to the wall (less than 15cm), regardless of being stuck, forcing a reverse maneuver.
             is_too_close = (fl_val < 0.15) or (fr_val < 0.15)
             
-            # --- Comprehensive Judgment (Accumulate stuck count if any condition is met) ---
-            # Condition 1: Visual Stasis + Wall nearby
+            # Comprehensive Judgment (Accumulate stuck count if any condition is met)
             cond1 = is_visually_static and (fl_val < 0.25 or fr_val < 0.25)
-            # Condition 2: Physical Stall (Wheels can't push)
             cond2 = is_physically_stuck
-            # Condition 3: Too close to the wall
             cond3 = is_too_close
             
             if cond1 or cond2 or cond3:
                 stuck_counter += 1
-                # [Debug Info] Print every 10 frames to see why the count is accumulating
                 if stuck_counter % 10 == 0:
-                    print(f"DEBUG: Stuck count accumulating... {stuck_counter}/30 (Static:{cond1} Stalled:{cond2} TooClose:{cond3})")
+                    print(Stuck count accumulating)
             else:
-                # Slowly reduce to prevent occasional normal stops from resetting it
+                # Slowly reduce to prevent occasional normal stops from resetting it.
                 stuck_counter = max(0, stuck_counter - 1)
         
         last_fl_val = fl_val
@@ -228,15 +219,10 @@ def main():
             recovery_phase = 1 
             recover_timer = 20
         
-        # ==========================================================
-        # [Logic 2] Spatio-temporal Trap Detection (Specifically solves the "shaking" problem)
-        # ==========================================================
         if current_state != STATE_IDLE and current_state != STATE_RECOVERING:
             trap_timer += 1
             
-            # Check displacement every 100 frames (approx. 3.2 seconds)
             if trap_timer > 100:
-                # Calculate distance moved in the last 3 seconds (Euclidean distance)
                 dist_moved = math.sqrt((ROBOT_X - trap_start_x)**2 + (ROBOT_Y - trap_start_y)**2)
                 
                 if dist_moved < 0.05: # Haven't moved 20cm in 3 seconds
@@ -250,33 +236,32 @@ def main():
                 trap_start_x = ROBOT_X
                 trap_start_y = ROBOT_Y
         else:
-            # If in recovery or idle, reset trap detection
+            # If in recovery or idle, reset detection
             trap_timer = 0
             trap_start_x = ROBOT_X
             trap_start_y = ROBOT_Y
             
-        # --- State: Forceful Recovery (Direction-locked) ---
+        # Forceful Recovery
         if current_state == STATE_RECOVERING:
             if recovery_phase == 1:
-                # [Phase 1] Reverse
+                # Reverse
                 motor_speed = [-3.0, -3.0] 
                 recover_timer -= 1
                 if recover_timer <= 0:
                     recovery_phase = 2
-                    recover_timer = 30 # Rotate for 1 second
+                    recover_timer = 30
                     
-                    # [Key Point] Decide the rotation direction here and store it in recovery_turn
                     if fl_val > fr_val:
                         recovery_turn = 1  # Lock to left turn
                     else:
                         recovery_turn = -1 # Lock to right turn
             
             elif recovery_phase == 2:
-                # [Phase 2] Rotate (Only listens to recovery_turn, ignores sensors)
+                # Ignores sensors
                 if recovery_turn == 1:
-                    motor_speed = [-5.0, 5.0] # Firm left turn
+                    motor_speed = [-5.0, 5.0] # Left turn
                 else:
-                    motor_speed = [5.0, -5.0] # Firm right turn
+                    motor_speed = [5.0, -5.0] # Right turn
                 
                 recover_timer -= 1
                 if recover_timer <= 0:
@@ -308,32 +293,28 @@ def main():
                     else: motor_speed = [-6.0, 6.0]
                     if current_state == STATE_FOLLOWING: current_state = STATE_PLANNING
                         
-                # ==========================================================
-                # [New] 2. Safe Situation -> Execute A* Navigation Logic
-                # ==========================================================
+                # Execute A* Navigation Logic
                 else:
-                    # --- State: Path Planning ---
+                    # Path Planning
                     if current_state == STATE_PLANNING:
                         # Coordinate conversion: Meters -> Grid
                         start_node = (l.meters_to_grid(ROBOT_X), l.meters_to_grid(ROBOT_Y))
                         goal_node = (l.meters_to_grid(GOAL_WORLD[0]), l.meters_to_grid(GOAL_WORLD[1]))
                         
-                        # Ensure grid exists (prevents error on first frame)
+                        # Ensure grid exists
                         if grid is not None:
-                            # [New] Create navigation-specific map (deep copy to avoid modifying original map)
-                            # This step temporarily turns "over-visited paths" into walls
+                            # Turns visited paths into walls
                             nav_grid = [row[:] for row in grid]
                             
-                            # [Core Logic] Mark cells with excessive visits (>50) as obstacles (1)
-                            # The threshold 50 means if the robot stays in a cell for approx. 1.5 seconds, it's considered a "dead end"
+                            # Mark cells with excessive visits (>50) as obstacles
                             for y in range(100):
                                 for x in range(100):
                                     if visit_map[y][x] > 50:
                                         nav_grid[y][x] = 1
                             
-                            # Ensure the Goal point itself is not marked as a wall (otherwise, no path will be found)
+                            # Ensure the Goal point itself is not marked as a wall
                             nav_grid[goal_node[1]][goal_node[0]] = 0
-                            # Ensure the Start point itself is not marked as a wall (otherwise, it can't move)
+                            # Ensure the Start point itself is not marked as a wall
                             nav_grid[start_node[1]][start_node[0]] = 0
 
                             # Use the nav_grid with virtual walls for planning
@@ -347,10 +328,10 @@ def main():
                             current_state = STATE_FOLLOWING
                             print(f"Path found! Length: {len(path)}")
                         else:
-                            motor_speed = [base_speed, base_speed] # Move boldly forward
+                            motor_speed = [base_speed, base_speed]
                             print("Path blocked -> Executing wall-following exploration...")
                 
-                    # --- State: Path Following ---
+                    # Path Following
                     elif current_state == STATE_FOLLOWING:
                         if path_index < len(current_path):
                             # Get target point and convert back to meters
@@ -365,7 +346,6 @@ def main():
                             angle_diff = normalize_angle(target_angle - ROBOT_THETA)
                             
                             # Control Logic
-                            # --- Smooth Navigation ---
                             cruise = 8.0
                             turn = angle_diff * 4.0
                             turn = max(-5.0, min(turn, 5.0))
@@ -373,8 +353,7 @@ def main():
                             left_speed = cruise - turn
                             right_speed = cruise + turn
                             
-                            # [New] Virtual Repulsion (Soft Inflation)
-                            # Apply repulsive force when near a wall (< 0.35m)
+                            # Apply push force when near a wall (< 0.35m)
                             SAFE_DIST = 0.35
                             PUSH_GAIN = 15.0
                             
@@ -388,7 +367,6 @@ def main():
                                 right_speed += push
                                 
                             motor_speed = [left_speed, right_speed]
-                            # ==========================================================
                             
                             # Reached detection
                             if math.sqrt(dx*dx + dy*dy) < 0.25:
@@ -399,26 +377,25 @@ def main():
                             motor_speed = [0, 0]
                             last_angle_error = 0.0
                             
-                    # --- State: Idle ---
+                    # Idle
                     elif current_state == STATE_IDLE:
                         motor_speed = [0, 0]
 
-                # [New] If the robot entered "U-turn" or "Braitenberg" avoidance above,
-                # the PID was not run this frame, so the error must be reset to prevent D term explosion next time.
+                # Reset error
                 if current_state != STATE_FOLLOWING:
                     last_angle_error = 0.0
 
-        # 3. Speed limiting (Preventing exceeding max velocity)
+        # Speed limiting (Preventing exceeding max velocity)
         motor_speed[0] = max(-MAX_VELOCITY, min(motor_speed[0], MAX_VELOCITY))
         motor_speed[1] = max(-MAX_VELOCITY, min(motor_speed[1], MAX_VELOCITY))
 
-        # 4. Set four motor speeds (Front/Rear Left share left speed, Front/Rear Right share right speed)
+        # Set four motor speeds (Front/Rear Left share left speed, Front/Rear Right share right speed)
         devices["motors"][0].setVelocity(motor_speed[0])  # Front Left
         devices["motors"][1].setVelocity(motor_speed[1])  # Front Right
         devices["motors"][2].setVelocity(motor_speed[0])  # Rear Left
         devices["motors"][3].setVelocity(motor_speed[1])  # Rear Right
 
-        # 5. Update robot position (Original code localization logic)
+        # Update robot position
         front_left_change = devices["position_sensors"][0].getValue() - front_left_last
         front_right_change = devices["position_sensors"][1].getValue() - front_right_last
         rear_left_change = devices["position_sensors"][2].getValue() - rear_left_last
@@ -431,10 +408,7 @@ def main():
         right_distance = mean([front_right_change, rear_right_change]) / POSITION_MULTIPLIER
         angle_change = (left_distance - right_distance) / TRACK_WIDTH
 
-        # ==========================================================
-        # [New] 3. Run Particle Filter to correct position
-        # ==========================================================
-        # Note: Need to pass the calculated distance and angle_change here
+        # Run Particle Filter to correct position
         grid, PARTICLES, est_pos = l.run_lidar(
             [distance, angle_change], 
             ROBOT_X, ROBOT_Y, ROBOT_THETA, 
@@ -443,24 +417,22 @@ def main():
             grid
         )
 
-        # New: Update robot pose with Particle Filter's estimated result
+        # Update robot pose with Particle Filter's estimated result
         ROBOT_X = est_pos[0]
         ROBOT_Y = est_pos[1]
         ROBOT_THETA = est_pos[2]
         
-        # ==========================================================
-        # [New] Update Visit Heatmap (Memory footprint)
-        # ==========================================================
-        # 1. Calculate current grid cell coordinates
+        # Update Visit Heatmap
+        # Calculate current grid cell coordinates
         gx = l.meters_to_grid(ROBOT_X)
         gy = l.meters_to_grid(ROBOT_Y)
         
-        # 2. Increase the visit count for the current cell (the longer it stays, the higher the value)
+        # Increase the visit count for the current cell (the longer it stays, the higher the value)
         if 0 <= gx < 100 and 0 <= gy < 100:
             visit_map[gy][gx] += 1
             
-        # 3. Memory Evaporation: Let old footprints slowly disappear
-        # This allows the robot to pass through here again after a while, preventing the path from being permanently blocked
+        # Make old footprints slowly disappear
+        # prevent the path from being permanently blocked
         visit_map *= 0.999
         
         # Update Last values
@@ -469,8 +441,7 @@ def main():
         rear_left_last = devices["position_sensors"][2].getValue()
         rear_right_last = devices["position_sensors"][3].getValue()
 
-        # 6. LiDAR grid map generation (Restoring saving + console printing)
-        # Save + visualize every 20 steps (to avoid excessive printing)
+        # LiDAR grid map generation
         if robot.getTime() % (20 * TIME_STEP / 1000) < TIME_STEP / 1000:
             l.save_grid_map(grid)  # Generate grid_map.txt file
             l.visualize_grid(grid) # Console print the grid map
