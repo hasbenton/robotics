@@ -198,7 +198,6 @@ def main():
 
         # Trigger Threshold: Accumulate to 30 points (approx. 1 second)
         if stuck_counter > 30:
-            print(f"🚨 Confirmed stuck against wall (Dist:{fl_val:.2f}/{fr_val:.2f}) -> Starting Recovery!")
             stuck_counter = 0
             current_state = STATE_RECOVERING
             recovery_phase = 1 
@@ -210,8 +209,7 @@ def main():
             if trap_timer > 100:
                 dist_moved = math.sqrt((ROBOT_X - trap_start_x)**2 + (ROBOT_Y - trap_start_y)**2)
                 
-                if dist_moved < 0.05: # Haven't moved 20cm in 3 seconds
-                    print(f"🚨 Detected shaking in place (3s displacement {dist_moved:.2f}m) -> Forced Recovery!")
+                if dist_moved < 0.05: 
                     current_state = STATE_RECOVERING
                     recovery_phase = 1
                     recover_timer = 50
