@@ -169,7 +169,7 @@ def main():
         # Stuck detection
         if current_state != STATE_IDLE and current_state != STATE_RECOVERING:
             
-            # Visual Stasis (Prevents wheel spin in place)
+            # Visual Stasis
             # Very little change in sensor readings means the robot hasn't moved relative to the wall
             sensor_diff = abs(fl_val - last_fl_val) + abs(fr_val - last_fr_val)
             is_visually_static = sensor_diff < 0.04
