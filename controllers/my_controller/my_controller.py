@@ -182,7 +182,7 @@ def main():
             # Close to wall
             is_too_close = (fl_val < 0.15) or (fr_val < 0.15)
             
-            # Comprehensive Judgment (Accumulate stuck count if any condition is met)
+            # Comprehensive check
             cond1 = is_visually_static and (fl_val < 0.25 or fr_val < 0.25)
             cond2 = is_physically_stuck
             cond3 = is_too_close
@@ -190,13 +190,12 @@ def main():
             if cond1 or cond2 or cond3:
                 stuck_counter += 1
             else:
-                # Slowly reduce to prevent occasional normal stops from resetting it.
                 stuck_counter = max(0, stuck_counter - 1)
         
         last_fl_val = fl_val
         last_fr_val = fr_val
 
-        # Trigger Threshold: Accumulate to 30 points (approx. 1 second)
+        # Trigger Threshold
         if stuck_counter > 30:
             stuck_counter = 0
             current_state = STATE_RECOVERING
@@ -257,7 +256,7 @@ def main():
         # 2. U-turn logic
         elif turn_180_counter > 0:
             turn_180_counter -= 1
-            # In-place left turn (Left wheels reverse, Right wheels forward)
+            # In-place left turn
             motor_speed[0] = -MAX_VELOCITY * 0.8
             motor_speed[1] = MAX_VELOCITY * 0.8
 
@@ -286,7 +285,7 @@ def main():
                             # Turns visited paths into walls
                             nav_grid = [row[:] for row in grid]
                             
-                            # Mark cells with excessive visits (>50) as obstacles
+                            # Mark cells with excessive visits as obstacles
                             for y in range(100):
                                 for x in range(100):
                                     if visit_map[y][x] > 50:
@@ -331,7 +330,7 @@ def main():
                             left_speed = cruise - turn
                             right_speed = cruise + turn
                             
-                            # Apply push force when near a wall (< 0.35m)
+                            # Apply push force when near a wall
                             SAFE_DIST = 0.35
                             PUSH_GAIN = 15.0
                             
