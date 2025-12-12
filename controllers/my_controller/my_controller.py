@@ -170,19 +170,16 @@ def main():
         if current_state != STATE_IDLE and current_state != STATE_RECOVERING:
             
             # Visual Stasis
-            # Very little change in sensor readings means the robot hasn't moved relative to the wall
             sensor_diff = abs(fl_val - last_fl_val) + abs(fr_val - last_fr_val)
             is_visually_static = sensor_diff < 0.04
             
             # Physical Stall
-            # Get current encoder values, calculate actual wheel movement
             curr_fl = devices["position_sensors"][0].getValue()
             curr_fr = devices["position_sensors"][1].getValue()
             encoder_move = (abs(curr_fl - front_left_last) + abs(curr_fr - front_right_last)) / 2.0
             is_physically_stuck = encoder_move < 0.002
             
             # Close to wall
-            # If too close to the wall (less than 15cm), regardless of being stuck, forcing a reverse maneuver.
             is_too_close = (fl_val < 0.15) or (fr_val < 0.15)
             
             # Comprehensive Judgment (Accumulate stuck count if any condition is met)
